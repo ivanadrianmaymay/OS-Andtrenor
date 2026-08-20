@@ -5536,7 +5536,7 @@ function addTrackedAccount(){
   }
   const categories = catsInput && catsInput.value.trim() ? catsInput.value.split(',').map(t => t.trim()).filter(Boolean) : [];
   pushUndo();
-  state.trackedAccounts.unshift({ id: uid(), handle, url, categories, note: '', addedAt: new Date().toISOString(), lastCheckedAt: null });
+  state.trackedAccounts.unshift({ id: uid(), handle, url, categories, note: '', postLinks: [], addedAt: new Date().toISOString(), lastCheckedAt: null });
   saveKey('trackedAccounts', state.trackedAccounts);
   render();
   toast('Cont adăugat');
@@ -5574,9 +5574,16 @@ function saveEditAccount(id){
   const noteInput = document.getElementById('edit-account-note-input');
   if (!catsInput) return;
   const categories = catsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+  const postLinks = [1,2,3].map(n => {
+    const el = document.getElementById('edit-account-post'+n+'-input');
+    const raw = el ? el.value.trim() : '';
+    if (!raw) return null;
+    const parsed = parseContentLink(raw);
+    return { url: raw, platform: parsed.platform, embedUrl: parsed.embedUrl };
+  }).filter(Boolean);
   pushUndo();
   const a = state.trackedAccounts.find(x => x.id === id);
-  if (a) { a.categories = categories; a.note = noteInput ? noteInput.value.trim() : (a.note||''); }
+  if (a) { a.categories = categories; a.note = noteInput ? noteInput.value.trim() : (a.note||''); a.postLinks = postLinks; }
   editAccountId = null;
   saveKey('trackedAccounts', state.trackedAccounts);
   render();
@@ -5965,6 +5972,17 @@ function renderTrackedAccountsSection(){
   const accountCardHtml = (a) => {
     const editing = editAccountId === a.id;
     const materialsCount = state.links.filter(l => l.sourceAccountId === a.id).length;
+    const postLinks = a.postLinks || [];
+    const previewGrid = postLinks.length
+      ? '<div class="grid" style="grid-template-columns:repeat('+postLinks.length+',1fr); gap:6px; margin-top:12px;">' +
+          postLinks.map(p => p.embedUrl
+            ? '<a href="'+escapeAttr(p.url)+'" target="_blank" rel="noopener noreferrer" style="position:relative; display:block; aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:#000;" title="Deschide postarea">' +
+                '<iframe src="'+escapeAttr(p.embedUrl)+'" style="width:100%; height:100%; border:0; display:block; pointer-events:none;" loading="lazy" title="Previzualizare postare"></iframe>' +
+              '</a>'
+            : '<a href="'+escapeAttr(p.url)+'" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; justify-content:center; aspect-ratio:1/1; border-radius:8px; background:rgba(0,0,0,.28); border:1px solid var(--line);" title="Deschide postarea">'+icon('external','icon-sm')+'</a>'
+          ).join('') +
+        '</div>'
+      : '';
     return '<div class="card">' +
       '<div class="flex items-start justify-between gap-3">' +
         '<div class="flex-1" style="min-width:0;">' +
@@ -5975,6 +5993,7 @@ function renderTrackedAccountsSection(){
           '<button data-action="delete-account" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
         '</div>' +
       '</div>' +
+      previewGrid +
       '<div class="flex flex-wrap gap-2 mt-3">' +
         '<button data-action="open-account" data-id="'+a.id+'" class="btn flex-1" style="justify-content:center; min-width:140px;">'+icon('external','icon-sm')+'Deschide profil</button>' +
         '<button data-action="mark-account-checked" data-id="'+a.id+'" class="btn flex-1" style="justify-content:center; min-width:140px;">'+icon('check','icon-sm')+'Am verificat</button>' +
@@ -5988,7 +6007,9 @@ function renderTrackedAccountsSection(){
             '<input id="edit-account-categories-input" type="text" value="'+escapeAttr(a.categories.join(', '))+'" placeholder="ex: mâncare, exerciții explicate" style="margin-bottom:8px;" />' +
             '<label class="field-label">Notă (opțional)</label>' +
             '<textarea id="edit-account-note-input" placeholder="Ce înveți de la acest cont…" style="min-height:60px; margin-bottom:8px;">'+escapeHtml(a.note||'')+'</textarea>' +
-            '<div class="flex gap-2">' +
+            '<label class="field-label">Previzualizări — până la 3 linkuri de postări/reels (opțional)</label>' +
+            [1,2,3].map(n => '<input id="edit-account-post'+n+'-input" type="text" value="'+escapeAttr((postLinks[n-1]&&postLinks[n-1].url)||'')+'" placeholder="Link postare/reel '+n+'…" style="margin-bottom:6px;" />').join('') +
+            '<div class="flex gap-2 mt-1">' +
               '<button data-action="save-account" data-id="'+a.id+'" class="btn btn-sm btn-primary">Salvează</button>' +
               '<button data-action="cancel-account" class="btn btn-sm">Anulează</button>' +
             '</div>' +
