@@ -5587,7 +5587,7 @@ function addTrackedAccount(){
   }
   const categories = catsInput && catsInput.value.trim() ? catsInput.value.split(',').map(t => t.trim()).filter(Boolean) : [];
   pushUndo();
-  state.trackedAccounts.unshift({ id: uid(), handle, url, categories, note: '', postLinks: [], addedAt: new Date().toISOString(), lastCheckedAt: null });
+  state.trackedAccounts.unshift({ id: uid(), handle, url, categories, note: '', postLinks: [], photo: null, addedAt: new Date().toISOString(), lastCheckedAt: null });
   saveKey('trackedAccounts', state.trackedAccounts);
   render();
   toast('Cont adăugat');
@@ -5636,6 +5636,49 @@ function saveEditAccount(id){
   const a = state.trackedAccounts.find(x => x.id === id);
   if (a) { a.categories = categories; a.note = noteInput ? noteInput.value.trim() : (a.note||''); a.postLinks = postLinks; }
   editAccountId = null;
+  saveKey('trackedAccounts', state.trackedAccounts);
+  render();
+}
+function resizeImageFileToDataUrl(file, size, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function handleAccountPhotoSelect(id, input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
+  if (file.size > 8*1024*1024) { toast('Poza e prea mare (max 8MB)', 'error'); return; }
+  resizeImageFileToDataUrl(file, 240, 0.85).then(dataUrl => {
+    pushUndo();
+    const a = state.trackedAccounts.find(x => x.id === id);
+    if (a) a.photo = dataUrl;
+    saveKey('trackedAccounts', state.trackedAccounts);
+    render();
+  }).catch(() => toast('Nu am putut încărca poza', 'error'));
+}
+function deleteAccountPhoto(id){
+  pushUndo();
+  const a = state.trackedAccounts.find(x => x.id === id);
+  if (a) a.photo = null;
   saveKey('trackedAccounts', state.trackedAccounts);
   render();
 }
@@ -6034,13 +6077,24 @@ function renderTrackedAccountsSection(){
           ).join('') +
         '</div>'
       : '';
+    const initial = (a.handle||'').replace(/^@/,'').charAt(0).toUpperCase() || '?';
+    const avatarHtml = '<label class="shrink-0" style="display:block; width:44px; height:44px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,.06); border:1px solid var(--line); cursor:pointer;" title="Adaugă/schimbă poza de profil">' +
+      (a.photo
+        ? '<img src="'+escapeAttr(a.photo)+'" alt="" style="width:100%; height:100%; object-fit:cover; display:block;" />'
+        : '<span style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:15px; font-weight:700; color:var(--text-faint);">'+escapeHtml(initial)+'</span>') +
+      '<input type="file" accept="image/*" data-action-file="account-photo" data-id="'+a.id+'" style="display:none;" />' +
+    '</label>';
     return '<div class="card">' +
       '<div class="flex items-start justify-between gap-3">' +
-        '<div class="flex-1" style="min-width:0;">' +
-          '<p class="text-sm" style="font-weight:700; word-break:break-word;">'+escapeHtml(a.handle)+'</p>' +
-          '<p class="text-xs mute3 mt-1">'+daysAgoLabel(a.lastCheckedAt)+'</p>' +
+        '<div class="flex items-start gap-3" style="min-width:0;">' +
+          avatarHtml +
+          '<div class="flex-1" style="min-width:0;">' +
+            '<p class="text-sm" style="font-weight:700; word-break:break-word;">'+escapeHtml(a.handle)+'</p>' +
+            '<p class="text-xs mute3 mt-1">'+daysAgoLabel(a.lastCheckedAt)+'</p>' +
+          '</div>' +
         '</div>' +
         '<div class="row-actions shrink-0">' +
+          (a.photo ? '<button data-action="delete-account-photo" data-id="'+a.id+'" class="icon-btn" aria-label="Șterge poza" title="Șterge poza de profil">'+icon('x','icon-sm')+'</button>' : '') +
           '<button data-action="delete-account" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
         '</div>' +
       '</div>' +
@@ -7243,6 +7297,7 @@ function onContentClick(e){
   else if (action === 'switch-library-view') switchLibraryView(el.dataset.view);
   else if (action === 'add-account') addTrackedAccount();
   else if (action === 'delete-account') deleteTrackedAccount(el.dataset.id);
+  else if (action === 'delete-account-photo') deleteAccountPhoto(el.dataset.id);
   else if (action === 'open-account') openTrackedAccount(el.dataset.id);
   else if (action === 'mark-account-checked') markAccountChecked(el.dataset.id);
   else if (action === 'toggle-account-category') toggleAccountCategoryFilter(el.dataset.cat);
@@ -7288,6 +7343,7 @@ function onContentChange(e){
     const kind = fileEl.dataset.actionFile;
     if (kind === 'new-testimonial-media') handleTestimonialMediaSelect(fileEl);
     else if (kind === 'existing-testimonial-media') handleExistingTestimonialMediaSelect(fileEl.dataset.id, fileEl);
+    else if (kind === 'account-photo') handleAccountPhotoSelect(fileEl.dataset.id, fileEl);
     return;
   }
   if (e.target && e.target.id === 'import-file-input' && e.target.files && e.target.files[0]) {
