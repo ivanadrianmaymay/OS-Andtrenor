@@ -219,6 +219,12 @@
     .overlay-panel.notes-panel-full .overlay-body{flex:1; min-height:0; display:flex; flex-direction:column; padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));}
     .overlay-panel.notes-panel-full #notes-textarea{flex:1; min-height:0; font-size:16.5px; resize:none;}
   }
+  /* Notes — bigger editor window on desktop too */
+  @media(min-width:640px){
+    .overlay-panel.notes-panel-full{width:92vw; max-width:900px; height:85vh; max-height:85vh;}
+    .overlay-panel.notes-panel-full .overlay-body{flex:1; min-height:0; display:flex; flex-direction:column;}
+    .overlay-panel.notes-panel-full #notes-textarea{flex:1; min-height:0; font-size:17px; line-height:1.75; padding:18px;}
+  }
   .activity-item{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.05);}
   .activity-item:last-child{border-bottom:none;}
   .activity-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:5px;flex-shrink:0;}
