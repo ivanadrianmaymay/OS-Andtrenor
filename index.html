@@ -2858,35 +2858,64 @@ function contentTypeStage(value){
   return g || null;
 }
 const STORY_DAY_TYPES = [
-  { stage: 'TOFU — Atragere', color: '#60A5FA', items: ['Reset & Mindset', 'Autoritate', 'Demontare Mituri'] },
-  { stage: 'MOFU — Încredere', color: '#FBBF24', items: ['Dovadă Socială / Victorie Client', 'Lifestyle'] },
-  { stage: 'BOFU — Conversie', color: '#34D399', items: ['Oferta Directă High-Ticket', 'Audit & Q&A'] },
+  { stage: 'TOFU — Atragere', color: '#60A5FA', items: [
+    'Reset & Mindset', 'Autoritate', 'Demontare Mituri', 'Greșeală rapidă / Sfat din sală', 'Opinie nepopulară / Stârnește dezbatere',
+  ]},
+  { stage: 'MOFU — Încredere', color: '#FBBF24', items: [
+    'Dovadă Socială / Victorie Client', 'Lifestyle', 'Nutriție practică / Meal Prep', 'Behind the Scenes / Cum lucrez', 'Răspuns la o obiecție',
+  ]},
+  { stage: 'BOFU — Conversie', color: '#34D399', items: [
+    'Ofertă Directă High-Ticket', 'Audit & Q&A', 'Cui i se potrivește / Cui nu', 'Urgență / Ultimele locuri', 'Call to Action direct / Sondaj',
+  ]},
 ];
+const STORY_DAY_TYPE_SLOTS = 3; // up to 3 story types can be planned for a single day
 function storyDayTypeStage(value){
   const g = STORY_DAY_TYPES.find(grp => grp.items.includes(value));
   return g || null;
 }
-function setDayStoryType(iso, value){
+// Normalizes a stored dayStoryType entry — which may be the legacy single
+// string, an array, or undefined — into a fixed-length array of exactly
+// STORY_DAY_TYPE_SLOTS items (padding with '' or truncating), so slot N
+// always reads/writes at index N-1 regardless of what shape was saved.
+function normalizeStoryTypeSlots(raw){
+  let arr;
+  if (Array.isArray(raw)) arr = raw.slice(0, STORY_DAY_TYPE_SLOTS);
+  else if (typeof raw === 'string' && raw) arr = [raw];
+  else arr = [];
+  while (arr.length < STORY_DAY_TYPE_SLOTS) arr.push('');
+  return arr;
+}
+function setDayStoryType(iso, slotIndex, value){
   state.calendar.dayStoryType = state.calendar.dayStoryType || {};
-  if (value) state.calendar.dayStoryType[iso] = value;
+  const slots = normalizeStoryTypeSlots(state.calendar.dayStoryType[iso]);
+  slots[slotIndex] = value || '';
+  while (slots.length && !slots[slots.length - 1]) slots.pop();
+  if (slots.length) state.calendar.dayStoryType[iso] = slots;
   else delete state.calendar.dayStoryType[iso];
+
   const weekday = new Date(iso + 'T00:00:00').getDay();
   state.calendar.weekdayStoryType = state.calendar.weekdayStoryType || {};
-  if (value) state.calendar.weekdayStoryType[weekday] = { type: value, anchorDate: iso };
+  if (slots.length) state.calendar.weekdayStoryType[weekday] = { types: slots, anchorDate: iso };
+  else delete state.calendar.weekdayStoryType[weekday];
   saveKey('calendar', state.calendar);
 }
+// Returns the story types that apply to this day (explicit if set, else the
+// recurring weekly recommendation), as a compact array with empty slots
+// filtered out — never a raw string, so callers can always .map()/.length it.
 function getEffectiveDayStoryType(iso){
-  const explicit = (state.calendar.dayStoryType || {})[iso];
-  if (explicit) return explicit;
+  const explicitRaw = (state.calendar.dayStoryType || {})[iso];
+  if (explicitRaw !== undefined) return normalizeStoryTypeSlots(explicitRaw).filter(Boolean);
   const weekday = new Date(iso + 'T00:00:00').getDay();
   const rec = (state.calendar.weekdayStoryType || {})[weekday];
-  if (!rec) return '';
+  if (!rec) return [];
+  const types = (rec.types || (rec.type ? [rec.type] : [])).filter(Boolean);
+  if (!types.length) return [];
   const repeatWeeks = Number(state.calendar.contentTypeRepeatWeeks) || 1;
-  if (repeatWeeks <= 1) return rec.type;
+  if (repeatWeeks <= 1) return types;
   const anchor = new Date(rec.anchorDate + 'T00:00:00');
   const thisDate = new Date(iso + 'T00:00:00');
   const weeksDiff = Math.round((thisDate - anchor) / (7*24*60*60*1000));
-  return (weeksDiff % repeatWeeks === 0) ? rec.type : '';
+  return (weeksDiff % repeatWeeks === 0) ? types : [];
 }
 function setDayContentType(iso, value){
   state.calendar.dayContentType = state.calendar.dayContentType || {};
@@ -4681,9 +4710,9 @@ function renderContentPosts(){
     const dayTypeExplicit = (state.calendar.dayContentType || {})[iso] || '';
     const dayType = getEffectiveDayType(iso);
     const dayTypeIsRecommended = !dayTypeExplicit && !!dayType;
-    const dayStoryTypeExplicit = (state.calendar.dayStoryType || {})[iso] || '';
+    const dayStoryTypeExplicit = (state.calendar.dayStoryType || {})[iso];
     const dayStoryType = getEffectiveDayStoryType(iso);
-    const dayStoryTypeIsRecommended = !dayStoryTypeExplicit && !!dayStoryType;
+    const dayStoryTypeIsRecommended = dayStoryTypeExplicit === undefined && dayStoryType.length > 0;
     return '<div class="day-col'+(isToday?' today':'')+'">' +
       '<div class="flex items-end justify-between mb-2" style="margin-bottom:10px;">' +
         '<p class="text-sm" style="font-weight:600; color:'+(isToday?'var(--accent)':'rgba(245,245,240,.8)')+';">'+dayName+(isToday?' · azi':'')+'</p>' +
@@ -4964,26 +4993,48 @@ function renderContentStory(){
     const iso = dateToISO(d);
     const isToday = iso === t;
     const dayName = RO_DAYS_SHORT[(d.getDay() + 6) % 7];
-    const dayStoryTypeExplicit = (state.calendar.dayStoryType || {})[iso] || '';
-    const dayStoryType = getEffectiveDayStoryType(iso);
-    const dayStoryTypeIsRecommended = !dayStoryTypeExplicit && !!dayStoryType;
+    const dayStoryTypeExplicitRaw = (state.calendar.dayStoryType || {})[iso];
+    const hasExplicitDayStoryType = dayStoryTypeExplicitRaw !== undefined;
+    const dayStoryTypes = getEffectiveDayStoryType(iso); // compact array, non-empty entries only
+    const dayStoryTypeIsRecommended = !hasExplicitDayStoryType && dayStoryTypes.length > 0;
+    // The 3 slot selects always reflect what's explicitly chosen for THIS day;
+    // with nothing explicit yet but a weekly recommendation in effect, they
+    // show the recommended values pre-filled, same "suggestion" feel as the
+    // single-select version had.
+    const slotValues = hasExplicitDayStoryType
+      ? normalizeStoryTypeSlots(dayStoryTypeExplicitRaw)
+      : normalizeStoryTypeSlots(dayStoryTypes);
+    const storySlotSelects = slotValues.map((val, i) => {
+      const stage = val ? storyDayTypeStage(val) : null;
+      return '<div class="flex items-center gap-1" style="margin-bottom:4px;">' +
+        '<span class="text-xs mute3" style="flex-shrink:0; width:13px;">'+(i+1)+'.</span>' +
+        '<select data-daystorytype="'+iso+'" data-storyslot="'+i+'" style="font-size:11px; flex:1; color:'+(val ? (stage||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
+          '<option value="">Tip Story ghidaj — nesetat</option>' +
+          STORY_DAY_TYPES.map(grp =>
+            '<optgroup label="'+grp.stage+'">' +
+              grp.items.map(st => '<option value="'+escapeAttr(st)+'" '+(st===val?'selected':'')+'>'+escapeHtml(st)+'</option>').join('') +
+            '</optgroup>'
+          ).join('') +
+        '</select>' +
+      '</div>';
+    }).join('');
+    const storyTypeBadges = dayStoryTypes.length
+      ? '<p class="text-xs mb-3" style="margin-bottom:14px; font-weight:600;">' +
+          dayStoryTypes.map(v => {
+            const st = storyDayTypeStage(v);
+            return st ? '<span style="color:'+st.color+';">'+st.stage.split(' — ')[0]+'</span>' : '';
+          }).filter(Boolean).join(' <span class="mute3" style="font-weight:400;">·</span> ') +
+          (dayStoryTypeIsRecommended ? ' <span class="mute3" style="font-weight:400; font-style:italic;">· recomandat</span>' : '') +
+        '</p>'
+      : '<div style="margin-bottom:14px;"></div>';
     const items = state.storyVault.items.filter(s => s.date === iso);
     return '<div class="day-col'+(isToday?' today':'')+'">' +
       '<div class="flex items-end justify-between mb-2" style="margin-bottom:10px;">' +
         '<p class="text-sm" style="font-weight:600; color:'+(isToday?'var(--accent)':'rgba(245,245,240,.8)')+';">'+dayName+(isToday?' · azi':'')+'</p>' +
         '<p class="text-xs mute3 tabular">'+formatShortDate(d)+'</p>' +
       '</div>' +
-      '<select data-daystorytype="'+iso+'" class="mb-1" style="font-size:11px; margin-bottom:6px; color:'+(dayStoryType ? (storyDayTypeStage(dayStoryType)||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
-        '<option value="">Tip Story ghidaj — nesetat</option>' +
-        STORY_DAY_TYPES.map(grp =>
-          '<optgroup label="'+grp.stage+'">' +
-            grp.items.map(st => '<option value="'+escapeAttr(st)+'" '+(st===dayStoryType?'selected':'')+'>'+escapeHtml(st)+'</option>').join('') +
-          '</optgroup>'
-        ).join('') +
-      '</select>' +
-      (dayStoryType && storyDayTypeStage(dayStoryType)
-        ? '<p class="text-xs mb-3" style="margin-bottom:14px; color:'+storyDayTypeStage(dayStoryType).color+'; font-weight:600;">'+storyDayTypeStage(dayStoryType).stage.split(' — ')[0]+(dayStoryTypeIsRecommended?' <span class="mute3" style="font-weight:400; font-style:italic;">· recomandat</span>':'')+'</p>'
-        : '<div style="margin-bottom:14px;"></div>') +
+      storySlotSelects +
+      storyTypeBadges +
       '<div class="flex-col gap-2 mb-3" style="display:flex; min-height:8px;">' +
         (items.length ? items.map(item => {
           const isEditing = editStoryId === item.id;
@@ -7229,7 +7280,7 @@ function onContentChange(e){
   const dayTypeEl = e.target.closest('[data-daytype]');
   if (dayTypeEl) { setDayContentType(dayTypeEl.dataset.daytype, dayTypeEl.value); renderCalendar(); return; }
   const dayStoryTypeEl = e.target.closest('[data-daystorytype]');
-  if (dayStoryTypeEl) { setDayStoryType(dayStoryTypeEl.dataset.daystorytype, dayStoryTypeEl.value); renderCalendar(); return; }
+  if (dayStoryTypeEl) { setDayStoryType(dayStoryTypeEl.dataset.daystorytype, Number(dayStoryTypeEl.dataset.storyslot), dayStoryTypeEl.value); renderCalendar(); return; }
   const storyArcEl = e.target.closest('[data-storyarcselect]');
   if (storyArcEl) { changeStoryArc(storyArcEl.dataset.storyarcselect, storyArcEl.value); return; }
   const fileEl = e.target.closest('[data-action-file]');
