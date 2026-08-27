@@ -408,11 +408,11 @@ const ACTIVITY_LIMIT = 300;
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'gauge', desktopOnly: true },
-  { id: 'checklist', label: 'Execuție Zilnică', icon: 'check', desktopOnly: true },
+  { id: 'checklist', label: 'Execuție Zilnică', icon: 'check' },
   { id: 'progress',  label: 'Progres', icon: 'flame' },
   { id: 'calendar',  label: 'Content', icon: 'calendar', desktopOnly: true },
   { id: 'library',   label: 'Inspirație', icon: 'play', desktopOnly: true },
-  { id: 'crm',       label: 'CRM Lead Tracker', icon: 'users' },
+  { id: 'crm',       label: 'CRM Lead Tracker', icon: 'users', desktopOnly: true },
   { id: 'testimonials', label: 'Testimoniale', icon: 'star' },
   { id: 'quickdesk', label: 'Sales Call Desk', icon: 'phone', desktopOnly: true },
   { id: 'reports',   label: 'Rapoarte', icon: 'chart' },
@@ -423,7 +423,7 @@ const NAV = [
 
 const BOTTOM_NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'gauge' },
-  { id: 'checklist', label: 'Checklist', icon: 'check' },
+  { id: 'crm',       label: 'CRM', icon: 'users' },
   { id: 'calendar',  label: 'Content', icon: 'calendar' },
   { id: 'library',   label: 'Inspirație', icon: 'play' },
 ];
@@ -1130,8 +1130,20 @@ async function attemptSave(key, payload){
   catch(e){ return false; }
 }
 async function saveKey(key, value){
-  scheduleSyncFileWrite();
-  scheduleGoogleDriveWrite();
+  // 'meta' is local-only sync bookkeeping (tokens, last-applied timestamps,
+  // last-backup time) — it's never part of buildExportPayload(), so pushing
+  // it to Drive/the sync file is a no-op write with no real content change.
+  // Scheduling one anyway created a self-sustaining loop: every successful
+  // write calls saveMeta() to record its own timestamp, which used to
+  // schedule ANOTHER write, forever, every ~1.5s — so once Drive/file sync
+  // was connected, this device stayed in a permanent write loop completely
+  // unrelated to any real local edit, making it constantly re-push (and, if
+  // it raced with another device's newer save, constantly at risk of
+  // overwriting it — the root of "always copies from the computer").
+  if (key !== 'meta') {
+    scheduleSyncFileWrite();
+    scheduleGoogleDriveWrite();
+  }
   const stamped = { t: Date.now(), v: value };
 
   // localStorage is synchronous — it lands immediately, even if the user
@@ -1521,6 +1533,32 @@ function scheduleSyncFileWrite(){
 async function writeSyncFile(){
   if (!syncFileHandle || syncFileNeedsReconnect) return;
   try {
+    // Same guard as Drive sync: check what's actually in the file right now
+    // before overwriting it. If it's newer than the last state THIS device
+    // is known to have incorporated (another device wrote it and this one
+    // hasn't caught up yet), pull it in instead of stomping it.
+    try {
+      const file = await syncFileHandle.getFile();
+      const text = await file.text();
+      if (text && text.trim()) {
+        const remoteParsed = JSON.parse(text);
+        if (remoteParsed && remoteParsed.exportedAt && remoteParsed.data) {
+          const remoteTime = new Date(remoteParsed.exportedAt).getTime();
+          const knownTime = appMeta.syncFileLastAppliedAt ? new Date(appMeta.syncFileLastAppliedAt).getTime() : 0;
+          if (remoteTime && remoteTime > knownTime) {
+            const active = document.activeElement;
+            const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+            if (!isEditing && applyImportedData(remoteParsed)) {
+              appMeta.syncFileLastAppliedAt = remoteParsed.exportedAt;
+              saveMeta();
+              toast('Am găsit date mai noi în fișier — le-am adus în loc să le suprascriu ☁');
+            }
+            return; // don't push over what we just found — next edit re-saves from the merged state
+          }
+        }
+      }
+    } catch(e){ /* pre-check failed (bad JSON mid-write elsewhere) — fall through and write anyway */ }
+
     const payload = buildExportPayload();
     const writable = await syncFileHandle.createWritable();
     await writable.write(JSON.stringify(payload, null, 2));
@@ -1766,6 +1804,41 @@ async function driveWrite(){
     const token = await driveGetValidToken(false);
     if (!token) { gDriveNeedsReconnect = true; if (syncOpen) renderOverlay(); return; }
     const fileId = await driveEnsureFileId(token);
+
+    // Guard against clobbering another device's newer save. Without this, any
+    // local edit on THIS device blindly overwrites the whole Drive file — so
+    // if the phone saved something this device hasn't pulled down yet (e.g.
+    // this device was just reopened, or the 90s poll hasn't run yet), the
+    // very next keystroke here would silently erase it. Check what's
+    // actually in Drive right now before overwriting it; if it's newer than
+    // the last state THIS device is known to have incorporated, pull it in
+    // instead and skip this push — the next edit will push the merged state.
+    try {
+      const checkRes = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (checkRes.ok) {
+        const checkText = await checkRes.text();
+        if (checkText && checkText.trim()) {
+          const remoteParsed = JSON.parse(checkText);
+          if (remoteParsed && remoteParsed.exportedAt && remoteParsed.data) {
+            const remoteTime = new Date(remoteParsed.exportedAt).getTime();
+            const knownTime = appMeta.driveLastAppliedAt ? new Date(appMeta.driveLastAppliedAt).getTime() : 0;
+            if (remoteTime && remoteTime > knownTime) {
+              const active = document.activeElement;
+              const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+              if (!isEditing && applyImportedData(remoteParsed)) {
+                appMeta.driveLastAppliedAt = remoteParsed.exportedAt;
+                saveMeta();
+                toast('Am găsit date mai noi în Drive — le-am adus în loc să le suprascriu ☁');
+              }
+              return; // don't push over what we just found — next edit re-saves from the merged state
+            }
+          }
+        }
+      }
+    } catch(e){ /* pre-check failed (offline blip, bad JSON) — fall through and write anyway rather than blocking sync entirely */ }
+
     const payload = buildExportPayload();
     const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
       method: 'PATCH',
@@ -2923,6 +2996,90 @@ function getEffectiveDayStoryType(iso){
   const weeksDiff = Math.round((thisDate - anchor) / (7*24*60*60*1000));
   return (weeksDiff % repeatWeeks === 0) ? types : [];
 }
+
+/* =========================================================
+   SMART TAGGING — auto keyword detection + Scop/Format pills
+   for content ideas & scheduled posts (Content → Content/Posts)
+========================================================= */
+const SMART_TAG_SCOPES = [
+  { id: 'vanzare',  label: 'Vânzare',        color: '#F87171', keywords: ['dm','protocol','inscrie','inscrieri','locuri','client','rezultat','transformare','aplicatie'] },
+  { id: 'educatie', label: 'Educație',       color: '#60A5FA', keywords: ['studiu','hipertrofie','executie','nutritie','proteine','calorii','stiinta','cercetare'] },
+  { id: 'carlig',   label: 'Cârlig / Viral', color: '#FBBF24', keywords: ['greseala','nu mai face','adevarul','mit','de ce','stop','secret'] },
+];
+const SMART_TAG_FORMATS = [
+  { id: 'talkinghead',   label: 'Talking Head', color: '#34D399', keywords: [] }, // implicit default — no keywords needed
+  { id: 'demonstratie',  label: 'Demonstrație', color: '#A78BFA', keywords: ['exercitiu','forma','antrenament','tehnica','cum sa faci'] },
+  { id: 'voiceover',     label: 'Voiceover',    color: '#38BDF8', keywords: ['voce','fundal','narativ'] },
+];
+const SMART_TAG_DEFAULT_FORMAT = 'talkinghead';
+function smartTagFold(str){
+  return String(str||'').toLowerCase()
+    .replace(/ă|â/g,'a').replace(/î/g,'i').replace(/ș/g,'s').replace(/ț/g,'t');
+}
+function smartTagInfo(list, id){ return list.find(x => x.id === id) || null; }
+// Scans free text for keyword matches and returns the best-guess {scope, format}.
+// scope is '' when nothing matches (no default — user picks manually); format
+// always has a value since Talking Head is the implicit default per spec.
+function detectSmartTags(text){
+  const t = smartTagFold(text);
+  let scope = '';
+  for (const s of SMART_TAG_SCOPES) { if (s.keywords.some(k => t.includes(k))) { scope = s.id; break; } }
+  let format = SMART_TAG_DEFAULT_FORMAT;
+  for (const f of SMART_TAG_FORMATS) { if (f.keywords.length && f.keywords.some(k => t.includes(k))) { format = f.id; break; } }
+  return { scope, format };
+}
+// Transient per-category draft while composing a NEW idea — tracks the live
+// auto-detected tags plus whether the user has manually overridden either
+// dimension (once manual, further typing stops re-guessing that dimension).
+let newIdeaTagDraft = {};
+function getNewIdeaTagDraft(pillar){
+  return newIdeaTagDraft[pillar] || (newIdeaTagDraft[pillar] = { scope: '', format: SMART_TAG_DEFAULT_FORMAT, scopeManual: false, formatManual: false });
+}
+function updateNewIdeaTagsFromText(pillar, text){
+  const d = getNewIdeaTagDraft(pillar);
+  const detected = detectSmartTags(text);
+  if (!d.scopeManual) d.scope = detected.scope;
+  if (!d.formatManual) d.format = detected.format;
+}
+function setNewIdeaTag(pillar, dim, value){
+  const d = getNewIdeaTagDraft(pillar);
+  d[dim] = value;
+  d[dim + 'Manual'] = true;
+  renderCalendar();
+}
+// Same idea, but for the single idea currently open in edit mode.
+let editIdeaTagDraft = null;
+function updateEditIdeaTagsFromText(text){
+  if (!editIdeaTagDraft) return;
+  const detected = detectSmartTags(text);
+  if (!editIdeaTagDraft.scopeManual) editIdeaTagDraft.scope = detected.scope;
+  if (!editIdeaTagDraft.formatManual) editIdeaTagDraft.format = detected.format;
+}
+function setEditIdeaTag(dim, value){
+  if (!editIdeaTagDraft) return;
+  editIdeaTagDraft[dim] = value;
+  editIdeaTagDraft[dim + 'Manual'] = true;
+  renderCalendar();
+}
+function smartTagPillRow(list, activeId, dataAction, extraAttrs){
+  return '<div class="flex flex-wrap gap-1" style="margin-top:6px;">' +
+    list.map(t => {
+      const active = t.id === activeId;
+      return '<button type="button" data-action="'+dataAction+'" data-tagid="'+t.id+'" '+(extraAttrs||'')+' class="status-pill" style="'+(active
+        ? 'background:'+t.color+'; color:#0A0A0A; border-color:transparent; font-weight:700;'
+        : 'color:'+t.color+'; border-color:'+t.color+'55;')+'">'+escapeHtml(t.label)+'</button>';
+    }).join('') +
+  '</div>';
+}
+function smartTagBadgesHtml(scope, format){
+  const s = scope ? smartTagInfo(SMART_TAG_SCOPES, scope) : null;
+  const f = format ? smartTagInfo(SMART_TAG_FORMATS, format) : null;
+  if (!s && !f) return '';
+  return '<div class="flex flex-wrap gap-1" style="margin-bottom:8px;">' +
+    (s ? '<span class="badge" style="font-size:10px; background:'+s.color+'22; color:'+s.color+'; border-color:transparent;">'+escapeHtml(s.label)+'</span>' : '') +
+    (f ? '<span class="badge" style="font-size:10px; background:'+f.color+'22; color:'+f.color+'; border-color:transparent;">'+escapeHtml(f.label)+'</span>' : '') +
+  '</div>';
+}
 function setDayContentType(iso, value){
   state.calendar.dayContentType = state.calendar.dayContentType || {};
   if (value) state.calendar.dayContentType[iso] = value;
@@ -3042,7 +3199,7 @@ function resetDay(){
 function allIdeasFlat(){
   const list = [];
   allIdeaCategories().forEach(cat => {
-    (state.content.ideas[cat.id] || []).forEach(it => list.push({ id: it.id, pillar: cat.id, text: it.text, hook: it.hook, body: it.body, cta: it.cta }));
+    (state.content.ideas[cat.id] || []).forEach(it => list.push({ id: it.id, pillar: cat.id, text: it.text, hook: it.hook, body: it.body, cta: it.cta, scope: it.scope, format: it.format }));
   });
   return list;
 }
@@ -3056,6 +3213,8 @@ function addPost(dateISO){
   if (picked.hook) post.hook = picked.hook;
   if (picked.body) post.body = picked.body;
   if (picked.cta) post.cta = picked.cta;
+  if (picked.scope) post.scope = picked.scope;
+  post.format = picked.format || SMART_TAG_DEFAULT_FORMAT;
   state.calendar.posts.push(post);
   saveKey('calendar', state.calendar);
   render();
@@ -3070,6 +3229,15 @@ function cyclePostStatus(id){
   if (post.status === 'postat') { logActivity('post', 'Postare publicată: ' + post.idea.slice(0,60)); addXP(150); vibrate(15); }
   saveKey('calendar', state.calendar); saveKey('activity', state.activity);
   render();
+}
+function setPostSmartTag(id, dim, value){
+  const post = state.calendar.posts.find(p => p.id === id);
+  if (!post) return;
+  pushUndo();
+  post[dim] = value;
+  saveKey('calendar', state.calendar);
+  renderOverlay();
+  renderCalendar();
 }
 function movePost(id, days){
   const post = state.calendar.posts.find(p => p.id === id);
@@ -3144,14 +3312,26 @@ function addIdea(pillar){
   if (!input) return;
   const val = input.value.trim();
   if (!val) { toast('Scrie o idee înainte de a o adăuga', 'error'); return; }
+  const tags = newIdeaTagDraft[pillar] || detectSmartTags(val);
   pushUndo();
   state.content.ideas[pillar] = state.content.ideas[pillar] || [];
-  state.content.ideas[pillar].push({ id: uid(), text: val });
+  state.content.ideas[pillar].push({ id: uid(), text: val, scope: tags.scope || '', format: tags.format || SMART_TAG_DEFAULT_FORMAT });
+  delete newIdeaTagDraft[pillar];
   saveKey('content', state.content);
   renderCalendar();
 }
-function startEditIdea(pillar, id){ editIdea = pillar + ':' + id; renderCalendar(); }
-function cancelEditIdea(){ editIdea = null; renderCalendar(); }
+function startEditIdea(pillar, id){
+  editIdea = pillar + ':' + id;
+  const item = (state.content.ideas[pillar] || []).find(x => x.id === id);
+  // Ideas already tagged keep their tags fixed while you fix a typo; ideas from
+  // before this feature (no scope/format stored yet) keep live-scanning as you edit.
+  editIdeaTagDraft = {
+    scope: (item && item.scope) || '', format: (item && item.format) || SMART_TAG_DEFAULT_FORMAT,
+    scopeManual: !!(item && item.scope), formatManual: !!(item && item.format),
+  };
+  renderCalendar();
+}
+function cancelEditIdea(){ editIdea = null; editIdeaTagDraft = null; renderCalendar(); }
 function toggleIdeaExpand(key){
   if (expandedIdeas.has(key)) expandedIdeas.delete(key); else expandedIdeas.add(key);
   renderCalendar();
@@ -3205,8 +3385,10 @@ function saveEditIdea(pillar, id){
   if (!val) { toast('Ideea nu poate fi goală', 'error'); return; }
   pushUndo();
   const item = (state.content.ideas[pillar] || []).find(x => x.id === id);
-  if (item) item.text = val;
+  const tags = editIdeaTagDraft || detectSmartTags(val);
+  if (item) { item.text = val; item.scope = tags.scope || ''; item.format = tags.format || SMART_TAG_DEFAULT_FORMAT; }
   editIdea = null;
+  editIdeaTagDraft = null;
   saveKey('content', state.content);
   renderCalendar();
 }
@@ -4745,6 +4927,7 @@ function renderContentPosts(){
               '<span class="dot" style="background:'+pl.color+'"></span>' +
               '<span class="text-xs mute2 truncate">'+pl.label+'</span>' +
             '</div>' +
+            smartTagBadgesHtml(p.scope, p.format) +
             '<p data-action="open-post-detail" data-id="'+p.id+'" class="text-xs" style="line-height:1.55; color:rgba(245,245,240,.85); margin:0 0 10px; cursor:pointer;" title="'+(hasScript?'Vezi scriptul complet':'Vezi detalii')+'">'+escapeHtml(p.idea)+(hasScript?' 📝':'')+'</p>' +
             (p.sourceLinkUrl ? '<a href="'+escapeAttr(p.sourceLinkUrl)+'" target="_blank" rel="noopener noreferrer" class="text-xs" style="color:var(--accent); display:inline-block; margin-bottom:10px;">'+icon('external','icon-sm')+' vezi sursa</a>' : '') +
             '<button data-action="cycle-status" data-id="'+p.id+'" class="badge" style="white-space:nowrap; background:'+POST_STATUS_COLORS[p.status]+'22;color:'+POST_STATUS_COLORS[p.status]+';border-color:transparent; margin-bottom:10px;">'+POST_STATUS_LABELS[p.status]+' →</button>' +
@@ -4800,9 +4983,14 @@ function renderContentPosts(){
           const ideaKey = k + ':' + it.id;
           const expanded = expandedIdeas.has(ideaKey);
           if (isEditing) {
+            const d = editIdeaTagDraft || { scope: it.scope || '', format: it.format || SMART_TAG_DEFAULT_FORMAT };
             return '<div style="background:rgba(0,0,0,.25); border:1px solid var(--accent-border); border-radius:10px; padding:8px 10px;">' +
               '<textarea id="edit-idea-input" style="font-size:12px; min-height:50px;">'+escapeHtml(it.text)+'</textarea>' +
-              '<div class="flex justify-end gap-1 mt-1">' +
+              '<p class="text-xs mute3" style="margin-top:6px;">Scop</p>' +
+              smartTagPillRow(SMART_TAG_SCOPES, d.scope, 'set-edit-idea-scope') +
+              '<p class="text-xs mute3" style="margin-top:6px;">Format</p>' +
+              smartTagPillRow(SMART_TAG_FORMATS, d.format, 'set-edit-idea-format') +
+              '<div class="flex justify-end gap-1 mt-2">' +
                 '<button data-action="save-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="icon-btn ok">'+icon('check','icon-sm')+'</button>' +
                 '<button data-action="cancel-idea" class="icon-btn">'+icon('x','icon-sm')+'</button>' +
               '</div>' +
@@ -4810,6 +4998,7 @@ function renderContentPosts(){
           }
           const hasExtra = it.body || it.angle;
           return '<div style="background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:10px; padding:8px 10px;">' +
+            smartTagBadgesHtml(it.scope, it.format) +
             '<div class="flex items-start gap-1 flex-wrap">' +
               '<p data-action="edit-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="text-xs flex-1" style="line-height:1.4; color:rgba(245,245,240,.7); cursor:text; min-width:140px;" title="Click pentru editare rapidă">'+escapeHtml(it.text)+'</p>' +
               '<div class="row-actions">' +
@@ -4832,10 +5021,19 @@ function renderContentPosts(){
               : '') +
           '</div>';
         }).join('') +
-        '<div class="flex gap-2">' +
-          '<input id="new-idea-input-'+k+'" type="text" placeholder="Idee nouă pentru această categorie…" style="font-size:12px;" class="flex-1" />' +
-          '<button data-action="add-idea" data-pillar="'+k+'" class="btn btn-icon shrink-0">'+icon('plus','icon-sm')+'</button>' +
-        '</div>' +
+        (() => {
+          const nd = getNewIdeaTagDraft(k);
+          return '<div>' +
+            '<div class="flex gap-2">' +
+              '<input id="new-idea-input-'+k+'" type="text" placeholder="Idee nouă pentru această categorie…" style="font-size:12px;" class="flex-1" />' +
+              '<button data-action="add-idea" data-pillar="'+k+'" class="btn btn-icon shrink-0">'+icon('plus','icon-sm')+'</button>' +
+            '</div>' +
+            '<p class="text-xs mute3" style="margin-top:6px;">Scop <span class="mute3" style="font-style:italic;">(detectat automat, sau alege manual)</span></p>' +
+            smartTagPillRow(SMART_TAG_SCOPES, nd.scope, 'set-new-idea-scope', 'data-pillar="'+k+'"') +
+            '<p class="text-xs mute3" style="margin-top:6px;">Format</p>' +
+            smartTagPillRow(SMART_TAG_FORMATS, nd.format, 'set-new-idea-format', 'data-pillar="'+k+'"') +
+          '</div>';
+        })() +
       '</div>') +
     '</div>';
   }).join('') +
@@ -6659,6 +6857,12 @@ function postDetailOverlayHtml(postId){
       '</div>' +
       '<div class="overlay-body flex-col gap-4" style="display:flex;">' +
         '<div class="chip"><p class="eyebrow" style="margin-bottom:4px;">Status</p><p class="text-sm" style="font-weight:700; color:'+POST_STATUS_COLORS[post.status]+';">'+POST_STATUS_LABELS[post.status]+'</p></div>' +
+        '<div>' +
+          '<p class="eyebrow" style="margin-bottom:4px;">Scop</p>' +
+          smartTagPillRow(SMART_TAG_SCOPES, post.scope||'', 'set-post-scope', 'data-id="'+post.id+'"') +
+          '<p class="eyebrow" style="margin:10px 0 4px;">Format</p>' +
+          smartTagPillRow(SMART_TAG_FORMATS, post.format||SMART_TAG_DEFAULT_FORMAT, 'set-post-format', 'data-id="'+post.id+'"') +
+        '</div>' +
         (hasScript ? (
           (post.hook ? '<div><p class="eyebrow" style="margin-bottom:4px;">Hook</p><p class="text-sm">'+escapeHtml(post.hook)+'</p></div>' : '') +
           (post.body ? '<div><p class="eyebrow" style="margin-bottom:4px;">Body</p><p class="text-sm muted" style="line-height:1.5; white-space:pre-line;">'+escapeHtml(post.body)+'</p></div>' : '') +
@@ -7089,6 +7293,12 @@ function onContentClick(e){
   else if (action === 'edit-idea') startEditIdea(el.dataset.pillar, el.dataset.id);
   else if (action === 'save-idea') saveEditIdea(el.dataset.pillar, el.dataset.id);
   else if (action === 'cancel-idea') cancelEditIdea();
+  else if (action === 'set-new-idea-scope') setNewIdeaTag(el.dataset.pillar, 'scope', el.dataset.tagid);
+  else if (action === 'set-new-idea-format') setNewIdeaTag(el.dataset.pillar, 'format', el.dataset.tagid);
+  else if (action === 'set-edit-idea-scope') setEditIdeaTag('scope', el.dataset.tagid);
+  else if (action === 'set-edit-idea-format') setEditIdeaTag('format', el.dataset.tagid);
+  else if (action === 'set-post-scope') setPostSmartTag(el.dataset.id, 'scope', el.dataset.tagid);
+  else if (action === 'set-post-format') setPostSmartTag(el.dataset.id, 'format', el.dataset.tagid);
   else if (action === 'remove-idea') removeIdea(el.dataset.pillar, el.dataset.id);
   else if (action === 'generate-script') generateScript();
   else if (action === 'copy-script') copyScript();
@@ -7413,6 +7623,12 @@ function onContentInput(e){
   else if (e.target && e.target.id === 'notes-textarea') { onNotesInput(e.target.value); }
   else if (e.target && e.target.id === 'link-search-input') { linkSearch = e.target.value; preserveCursor('link-search-input', renderLibrary); }
   else if (e.target && e.target.id === 'account-search-input') { accountSearch = e.target.value; preserveCursor('account-search-input', renderLibrary); }
+  else if (e.target && e.target.id === 'edit-idea-input') { updateEditIdeaTagsFromText(e.target.value); preserveCursor('edit-idea-input', renderCalendar); }
+  else if (e.target && e.target.id && e.target.id.indexOf('new-idea-input-') === 0) {
+    const pillar = e.target.id.slice('new-idea-input-'.length);
+    updateNewIdeaTagsFromText(pillar, e.target.value);
+    preserveCursor(e.target.id, renderCalendar);
+  }
   else {
     const storyEl = e.target.closest('[data-story]');
     if (storyEl) updateStoryStep(storyEl.dataset.story, storyEl.dataset.storystep, storyEl.value);
@@ -7526,10 +7742,9 @@ function bindEventsOnce(){
   window.addEventListener('beforeunload', onBeforeUnload);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPendingSaves();
-    else if (document.visibilityState === 'visible') readSyncFile(true); // just came back — pull in whatever another device may have written meanwhile
+    else if (document.visibilityState === 'visible') { readSyncFile(true); driveRead(true); } // just came back — pull in whatever another device may have written meanwhile
   });
-  window.addEventListener('focus', () => readSyncFile(true));
-  document.getElementById('import-file-input').addEventListener('change', onContentChange);
+  window.addEventListener('focus', () => { readSyncFile(true); driveRead(true); });
   window.addEventListener('scroll', onScrollForFab, { passive: true });
   document.addEventListener('scroll', trackOverlayScroll, { capture: true, passive: true });
   document.addEventListener('touchstart', onTooltipTouchStart, { passive: true });
