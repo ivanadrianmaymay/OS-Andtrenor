@@ -845,6 +845,7 @@ let editLinkTags = null;
 let forcedPreviewIds = new Set();
 let openDeconIds = new Set();
 let schedulingLinkId = null;
+let schedulingShotId = null; // shot id currently showing the "which day do you want to schedule this for" prompt, after being checked off as filmed
 let libraryView = 'materials'; // 'materials' | 'accounts' — the two Inspirație subsections
 let accountCategoryFilter = [];
 let accountSearch = '';
@@ -857,7 +858,6 @@ let shotListPicker = false;
 // transient "currently editing" trackers
 let editTask = null, editCategory = null, editIdea = null, editScript = null;
 let expandedIdeas = new Set();
-let expandedShotScripts = new Set();
 let collapsedIdeaCategories = new Set();
 let addLeadFormOpen = false;
 let collapsedResourceGroups = new Set();
@@ -3428,6 +3428,11 @@ function addPostToShotList(postId){
   if (post.hook) shot.hook = post.hook;
   if (post.body) shot.body = post.body;
   if (post.cta) shot.cta = post.cta;
+  if (post.sourceLinkUrl) {
+    shot.videoUrl = post.sourceLinkUrl;
+    shot.videoPlatform = post.sourcePlatform || 'other';
+    shot.videoEmbedUrl = parseContentLink(post.sourceLinkUrl).embedUrl;
+  }
   state.shotList.items.push(shot);
   saveKey('shotList', state.shotList);
   renderCalendar();
@@ -3442,7 +3447,10 @@ function addLinkToShotList(linkId){
   pushUndo();
   const platformName = link.platform === 'instagram' ? 'Instagram' : link.platform === 'tiktok' ? 'TikTok' : 'link salvat';
   const text = (link.tags && link.tags.length ? '#'+link.tags.join(' #')+' — ' : '') + 'Conținut din Inspirație (' + platformName + ')';
-  const shot = { id: uid(), sourceLinkId: linkId, text, pillar: 'tehnic', location: '', outfit: '', prop: '', roll: 'Talking Head', effort: 'mediu', done: false };
+  // Video info is copied onto the shot itself (not just referenced by id) so the
+  // preview keeps working in the Shot List even if the original saved link is
+  // later edited or removed from Inspirație.
+  const shot = { id: uid(), sourceLinkId: linkId, text, pillar: 'tehnic', location: '', outfit: '', prop: '', roll: 'Talking Head', effort: 'mediu', done: false, videoUrl: link.url, videoPlatform: link.platform, videoEmbedUrl: link.embedUrl || null };
   if (link.hook) shot.hook = link.hook;
   if (link.angle) shot.body = link.angle;
   if (link.cta) shot.cta = link.cta;
@@ -3459,10 +3467,53 @@ function updateShotItem(id, field, value){
   if (field === 'roll' || field === 'effort') renderCalendar(); // these affect batch sort order + badges, refresh live
 }
 function toggleShotDone(id){
-  pushUndo();
   const item = state.shotList.items.find(s => s.id === id);
-  if (item) item.done = !item.done;
+  if (!item) return;
+  pushUndo();
+  item.done = !item.done;
   saveKey('shotList', state.shotList);
+  if (item.done) {
+    // Just marked as filmed — reflect that on whatever calendar post this shot
+    // is already tied to (either its original source post, or one scheduled
+    // from a previous pass through this same prompt); if it isn't tied to a
+    // post yet, ask which day to schedule it for posting instead of silently
+    // leaving it un-planned.
+    const existingPostId = item.sourcePostId || item.scheduledPostId;
+    const existingPost = existingPostId ? state.calendar.posts.find(p => p.id === existingPostId) : null;
+    if (existingPost) {
+      existingPost.status = 'filmat';
+      saveKey('calendar', state.calendar);
+      toast('Filmat — status actualizat în calendar');
+    } else {
+      schedulingShotId = id;
+    }
+  } else {
+    schedulingShotId = null; // unchecking cancels any pending schedule prompt for this shot
+  }
+  if (filmingMode) renderFilmingMode(); else renderCalendar();
+}
+function confirmScheduleShot(id){
+  const item = state.shotList.items.find(s => s.id === id);
+  if (!item) return;
+  const dateInput = document.getElementById('shot-schedule-date-input');
+  const pillarSelect = document.getElementById('shot-schedule-pillar-select');
+  if (!dateInput || !dateInput.value) { toast('Alege o dată', 'error'); return; }
+  pushUndo();
+  const post = { id: uid(), date: dateInput.value, pillar: pillarSelect ? pillarSelect.value : item.pillar, idea: item.text, status: 'filmat' };
+  if (item.hook) post.hook = item.hook;
+  if (item.body) post.body = item.body;
+  if (item.cta) post.cta = item.cta;
+  if (item.videoUrl) { post.sourceLinkUrl = item.videoUrl; post.sourcePlatform = item.videoPlatform || 'other'; }
+  state.calendar.posts.push(post);
+  item.scheduledPostId = post.id;
+  saveKey('calendar', state.calendar);
+  saveKey('shotList', state.shotList);
+  schedulingShotId = null;
+  if (filmingMode) renderFilmingMode(); else renderCalendar();
+  toast('Programat pe ' + formatDateRO(dateInput.value));
+}
+function cancelScheduleShot(){
+  schedulingShotId = null;
   if (filmingMode) renderFilmingMode(); else renderCalendar();
 }
 function exportShotListText(){
@@ -3529,6 +3580,7 @@ function closeFilmingMode(){
   stopTeleprompterScroll();
   teleprompterPlaying = false;
   renderFilmingMode();
+  renderCalendar(); // refresh the Shot List behind it — done-states and any pending "schedule this?" prompt from during the session need to show up now
 }
 function toggleFilmingViewMode(){
   filmingViewMode = filmingViewMode === 'list' ? 'teleprompter' : 'list';
@@ -5145,7 +5197,44 @@ function renderContentPosts(){
               const idx = state.shotList.items.findIndex(x => x.id === s.id);
               const total = state.shotList.items.length;
               const eff = EFFORT_TAGS.find(e => e.key === (s.effort||'mediu'));
-              const scriptExpanded = expandedShotScripts.has(s.id);
+              const scheduledPost = s.scheduledPostId ? state.calendar.posts.find(p => p.id === s.scheduledPostId) : null;
+              const linkedPost = s.sourcePostId ? state.calendar.posts.find(p => p.id === s.sourcePostId) : null;
+              const plannedFor = scheduledPost || linkedPost;
+              // Video preview — same embed mechanism as Inspirație, so a saved
+              // clip can be rewatched right here instead of hunting it down again.
+              const videoPreview = s.videoUrl
+                ? (s.videoEmbedUrl
+                    ? '<div style="border-radius:10px; overflow:hidden; background:#000; max-height:320px; aspect-ratio:'+(s.videoPlatform==='tiktok'?'9/16':'1/1')+'; margin-bottom:8px;">' +
+                        '<iframe src="'+escapeAttr(s.videoEmbedUrl)+'" style="width:100%; height:100%; border:0; display:block;" allow="autoplay; encrypted-media; clipboard-write" loading="lazy" title="Preview"></iframe>' +
+                      '</div>'
+                    : '<a href="'+escapeAttr(s.videoUrl)+'" target="_blank" rel="noopener noreferrer" class="flex flex-col items-center justify-center gap-1" style="background:rgba(0,0,0,.28); border:1px solid var(--line); border-radius:10px; padding:18px 14px; margin-bottom:8px; text-align:center;">' +
+                        '<span style="font-size:22px;">'+(s.videoPlatform==='instagram'?'📸':s.videoPlatform==='tiktok'?'🎵':'🔗')+'</span>' +
+                        '<span class="text-xs mute3">Previzualizare indisponibilă — deschide link-ul</span>' +
+                      '</a>') +
+                  (s.videoEmbedUrl ? '<a href="'+escapeAttr(s.videoUrl)+'" target="_blank" rel="noopener noreferrer" class="text-xs" style="color:var(--accent); display:inline-block; margin-bottom:8px;">'+icon('external','icon-sm')+' deschide video ↗</a>' : '')
+                : '';
+              // Everything needed to actually shoot it — always visible, not
+              // hidden behind a click, so it's all in one glance while filming.
+              const filmingNotes = (s.hook || s.body || s.cta)
+                ? '<div style="margin-top:8px; background:rgba(0,0,0,.2); border-radius:8px; padding:8px 10px;">' +
+                    (s.hook ? '<p class="eyebrow" style="margin-bottom:2px;">Hook</p><p class="text-xs mute2" style="margin-bottom:6px;">'+escapeHtml(s.hook)+'</p>' : '') +
+                    (s.body ? '<p class="eyebrow" style="margin-bottom:2px;">Script</p><p class="text-xs mute2" style="margin-bottom:6px; white-space:pre-line;">'+escapeHtml(s.body)+'</p>' : '') +
+                    (s.cta ? '<p class="eyebrow" style="margin-bottom:2px;">CTA</p><p class="text-xs mute2">'+escapeHtml(s.cta)+'</p>' : '') +
+                  '</div>'
+                : '';
+              const scheduleBlock = schedulingShotId === s.id
+                ? '<div class="mt-2" style="background:rgba(0,0,0,.25); border:1px solid var(--accent-border); border-radius:10px; padding:10px;">' +
+                    '<p class="field-label">🎬 Filmat! Pentru ce zi îl programezi la postare?</p>' +
+                    '<div class="flex gap-2">' +
+                      '<input id="shot-schedule-date-input" type="date" value="'+todayISO()+'" class="flex-1" />' +
+                      '<select id="shot-schedule-pillar-select">'+Object.keys(PILLARS).map(k=>'<option value="'+k+'" '+(k===s.pillar?'selected':'')+'>'+PILLARS[k].label+'</option>').join('')+'</select>' +
+                    '</div>' +
+                    '<div class="flex gap-2 mt-2">' +
+                      '<button data-action="confirm-schedule-shot" data-id="'+s.id+'" class="btn btn-sm btn-primary">Programează în calendar</button>' +
+                      '<button data-action="cancel-schedule-shot" class="btn btn-sm">Mai târziu</button>' +
+                    '</div>' +
+                  '</div>'
+                : '';
               return '<div class="card" style="background:rgba(0,0,0,.22);'+(s.done?'opacity:.55;':'')+'">' +
                 '<div class="flex items-start gap-2">' +
                   '<button data-action="toggle-shot-done" data-id="'+s.id+'" class="checkbox'+(s.done?' checked':'')+'" style="margin-top:2px;">'+(s.done ? icon('check','icon-sm').replace('stroke="currentColor"','stroke="#0A0A0A"') : '')+'</button>' +
@@ -5154,21 +5243,19 @@ function renderContentPosts(){
                       '<span class="dot" style="background:'+pl.color+';"></span><span class="text-xs mute2">'+pl.label+'</span>' +
                       '<span class="badge" style="font-size:10px; color:'+eff.color+'; border-color:'+eff.color+'44;">'+eff.label+'</span>' +
                       (s.body ? '<span class="badge" style="font-size:10px;">📝 Script</span>' : '') +
+                      (plannedFor ? '<span class="badge" style="font-size:10px; color:var(--accent); border-color:var(--accent-border);">📅 '+formatDateRO(plannedFor.date)+'</span>' : '') +
                     '</div>' +
                     '<p class="text-sm" style="color:rgba(245,245,240,.9);'+(s.done?'text-decoration:line-through;':'')+'">'+escapeHtml(s.text)+'</p>' +
                   '</div>' +
                   '<div class="row-actions shrink-0">' +
-                    (s.body ? '<button data-action="toggle-shot-script" data-id="'+s.id+'" class="icon-btn" aria-label="Vezi scriptul" title="Arată Hook/Body/CTA salvat pentru acest cadru">'+icon(scriptExpanded?'chevronDown':'chevronRight','icon-sm')+'</button>' : '') +
                     '<button data-action="reorder-shot" data-id="'+s.id+'" data-dir="-1" class="icon-btn"'+(idx===0?' style="opacity:.25; pointer-events:none;"':'')+' aria-label="Mută sus">▲</button>' +
                     '<button data-action="reorder-shot" data-id="'+s.id+'" data-dir="1" class="icon-btn"'+(idx===total-1?' style="opacity:.25; pointer-events:none;"':'')+' aria-label="Mută jos">▼</button>' +
                     '<button data-action="remove-shot" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
                   '</div>' +
                 '</div>' +
-                (s.body && scriptExpanded ? '<div style="margin-top:8px; background:rgba(0,0,0,.2); border-radius:8px; padding:8px 10px;">' +
-                  (s.hook ? '<p class="eyebrow" style="margin-bottom:2px;">Hook</p><p class="text-xs mute2" style="margin-bottom:6px;">'+escapeHtml(s.hook)+'</p>' : '') +
-                  '<p class="eyebrow" style="margin-bottom:2px;">Body</p><p class="text-xs mute2" style="margin-bottom:6px; white-space:pre-line;">'+escapeHtml(s.body)+'</p>' +
-                  (s.cta ? '<p class="eyebrow" style="margin-bottom:2px;">CTA</p><p class="text-xs mute2">'+escapeHtml(s.cta)+'</p>' : '') +
-                '</div>' : '') +
+                (videoPreview ? '<div style="margin-top:10px;">'+videoPreview+'</div>' : '') +
+                filmingNotes +
+                scheduleBlock +
                 '<div class="grid" style="grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">' +
                   '<div><label class="field-label">Locație</label><input data-shot="'+s.id+'" data-shotfield="location" type="text" value="'+escapeAttr(s.location)+'" placeholder="ex: sală" /></div>' +
                   '<div><label class="field-label">Ținută</label><input data-shot="'+s.id+'" data-shotfield="outfit" type="text" value="'+escapeAttr(s.outfit)+'" placeholder="ex: negru" /></div>' +
@@ -5763,6 +5850,12 @@ function deleteContentLink(id){
   saveKey('links', state.links);
   render();
 }
+function copyContentLink(id){
+  const l = state.links.find(x => x.id === id);
+  if (!l) return;
+  copyToClipboard(l.url);
+  toast('Link copiat — gata de trimis');
+}
 
 /* =========================================================
    MUTATIONS — tracked Instagram accounts (Inspirație)
@@ -5809,6 +5902,12 @@ function openTrackedAccount(id){
   const a = state.trackedAccounts.find(x => x.id === id);
   if (!a) return;
   window.open(a.url, '_blank', 'noopener,noreferrer');
+}
+function copyTrackedAccountLink(id){
+  const a = state.trackedAccounts.find(x => x.id === id);
+  if (!a) return;
+  copyToClipboard(a.url);
+  toast('Link profil copiat — gata de trimis');
 }
 function markAccountChecked(id){
   const a = state.trackedAccounts.find(x => x.id === id);
@@ -6186,6 +6285,7 @@ function renderMaterialsSection(){
           (sourceAccount ? '<span class="badge" style="opacity:.8;" title="Sursă">'+escapeHtml(sourceAccount.handle)+'</span>' : '') +
         '</div>' +
         '<div class="row-actions">' +
+          '<button data-action="copy-link" data-id="'+l.id+'" class="icon-btn" aria-label="Copiază link" title="Copiază link">'+icon('copy','icon-sm')+'</button>' +
           '<button data-action="delete-link" data-id="'+l.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
         '</div>' +
       '</div>' +
@@ -6299,6 +6399,7 @@ function renderTrackedAccountsSection(){
         '</div>' +
         '<div class="row-actions shrink-0">' +
           (a.photo ? '<button data-action="delete-account-photo" data-id="'+a.id+'" class="icon-btn" aria-label="Șterge poza" title="Șterge poza de profil">'+icon('x','icon-sm')+'</button>' : '') +
+          '<button data-action="copy-account-link" data-id="'+a.id+'" class="icon-btn" aria-label="Copiază link profil" title="Copiază link profil">'+icon('copy','icon-sm')+'</button>' +
           '<button data-action="delete-account" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
         '</div>' +
       '</div>' +
@@ -7328,7 +7429,8 @@ function onContentClick(e){
   else if (action === 'add-post-to-shotlist') addPostToShotList(el.dataset.id);
   else if (action === 'add-link-to-shotlist') addLinkToShotList(el.dataset.id);
   else if (action === 'toggle-shot-done') toggleShotDone(el.dataset.id);
-  else if (action === 'toggle-shot-script') { const id=el.dataset.id; if(expandedShotScripts.has(id)) expandedShotScripts.delete(id); else expandedShotScripts.add(id); renderCalendar(); }
+  else if (action === 'confirm-schedule-shot') confirmScheduleShot(el.dataset.id);
+  else if (action === 'cancel-schedule-shot') cancelScheduleShot();
   else if (action === 'remove-shot') removeShotItem(el.dataset.id);
   else if (action === 'clear-shotlist') clearShotList();
   else if (action === 'generate-story-sequence') generateStorySequence(el.dataset.date);
@@ -7490,6 +7592,7 @@ function onContentClick(e){
   else if (action === 'send-renewal-message') sendRenewalMessage(el.dataset.id);
   else if (action === 'toggle-discovery-step') toggleDiscoveryStep(el.dataset.id, el.dataset.step);
   else if (action === 'add-link') addContentLink();
+  else if (action === 'copy-link') copyContentLink(el.dataset.id);
   else if (action === 'delete-link') deleteContentLink(el.dataset.id);
   else if (action === 'force-preview') { forcedPreviewIds.add(el.dataset.id); renderLibrary(); }
   else if (action === 'toggle-link-decon') { const id=el.dataset.id; if(openDeconIds.has(id)) openDeconIds.delete(id); else openDeconIds.add(id); renderLibrary(); }
@@ -7513,6 +7616,7 @@ function onContentClick(e){
   else if (action === 'switch-library-view') switchLibraryView(el.dataset.view);
   else if (action === 'add-account') addTrackedAccount();
   else if (action === 'delete-account') deleteTrackedAccount(el.dataset.id);
+  else if (action === 'copy-account-link') copyTrackedAccountLink(el.dataset.id);
   else if (action === 'delete-account-photo') deleteAccountPhoto(el.dataset.id);
   else if (action === 'open-account') openTrackedAccount(el.dataset.id);
   else if (action === 'mark-account-checked') markAccountChecked(el.dataset.id);
