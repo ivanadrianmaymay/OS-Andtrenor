@@ -851,6 +851,7 @@ let accountCategoryFilter = [];
 let accountSearch = '';
 let editAccountId = null;
 let materialsAccountFilter = null; // account id — set via "Vezi materialele" cross-link from a tracked account
+let materialsShotListOnly = false; // when true, Materiale shows only links already added to the filming Shot List
 let testimonialTagFilter = [];
 let editTestimonialId = null;
 let shotListPicker = false;
@@ -6229,9 +6230,11 @@ function renderLibrary(){
 }
 function renderMaterialsSection(){
   const allTags = Array.from(new Set(state.links.flatMap(l => l.tags))).sort();
+  const shotSourceLinkIds = new Set(state.shotList.items.map(s => s.sourceLinkId).filter(Boolean));
   let links = state.links.slice();
   if (materialsAccountFilter && !state.trackedAccounts.some(a => a.id === materialsAccountFilter)) materialsAccountFilter = null;
   if (materialsAccountFilter) links = links.filter(l => l.sourceAccountId === materialsAccountFilter);
+  if (materialsShotListOnly) links = links.filter(l => shotSourceLinkIds.has(l.id));
   if (linkTagFilter.length) links = links.filter(l => l.tags.some(t => linkTagFilter.includes(t)));
   if (linkSearch.trim()) {
     const q = normalize(linkSearch);
@@ -6240,7 +6243,6 @@ function renderMaterialsSection(){
 
   const platformLabel = { instagram: '📸 Instagram', tiktok: '🎵 TikTok', other: '🔗 Link' };
   const openLabel = { instagram: 'Deschide în Instagram', tiktok: 'Deschide în TikTok', other: 'Deschide link' };
-  const shotSourceLinkIds = new Set(state.shotList.items.map(s => s.sourceLinkId).filter(Boolean));
 
   const cardHtml = (l) => {
     const editingTags = editLinkTags === l.id;
@@ -6340,6 +6342,10 @@ function renderMaterialsSection(){
           '<span class="status-pill active" style="background:var(--accent);">Din '+escapeHtml(activeAccountFilter.handle)+'</span>' +
           '<button data-action="clear-materials-account-filter" class="icon-btn" aria-label="Șterge filtrul">'+icon('x','icon-sm')+'</button>' +
         '</div>'
+      : '') +
+
+    (state.shotList.items.length || materialsShotListOnly
+      ? '<button data-action="toggle-materials-shotlist-filter" class="status-pill'+(materialsShotListOnly?' active':'')+'"'+(materialsShotListOnly?' style="background:var(--accent);"':'')+'>'+icon('film','icon-sm')+' Doar din Shot List ('+shotSourceLinkIds.size+')</button>'
       : '') +
 
     (allTags.length
@@ -7626,6 +7632,7 @@ function onContentClick(e){
   else if (action === 'cancel-account') cancelEditAccount();
   else if (action === 'filter-materials-by-account') filterMaterialsByAccount(el.dataset.id);
   else if (action === 'clear-materials-account-filter') clearMaterialsAccountFilter();
+  else if (action === 'toggle-materials-shotlist-filter') { materialsShotListOnly = !materialsShotListOnly; renderLibrary(); }
 }
 function onContentChange(e){
   const el = e.target.closest('[data-field]');
