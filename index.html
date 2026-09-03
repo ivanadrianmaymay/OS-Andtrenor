@@ -497,7 +497,7 @@ const STORY_ARCS = [
   { name: 'Autoritate',                         desc: 'O lecție tehnică scurtă care arată că știi despre ce vorbești' },
   { name: 'Dovadă Socială / Victorie Client',   desc: 'Un rezultat, un feedback sau un before/after real' },
   { name: 'Demontare Mituri',                   desc: 'Sparge un mit comun din fitness/nutriție' },
-  { name: 'Oferta Directă High-Ticket',         desc: 'Vorbește direct despre MASTERY — fără ocolișuri' },
+  { name: 'Ofertă Directă High-Ticket',         desc: 'Vorbește direct despre MASTERY — fără ocolișuri' },
   { name: 'Lifestyle',                          desc: 'Partea umană — o zi din viața ta, ceva relatable' },
   { name: 'Audit & Q&A',                        desc: 'Recapitulează săptămâna, răspunde la întrebări din DM' },
 ];
@@ -551,10 +551,30 @@ const STORY_DRAFTS = [
     trigger: ['Ce întrebare ai pentru mine? Scrie-mi în DM chiar acum.'],
   },
 ];
-function pickDraft(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function pickDraft(arr){ return arr && arr.length ? arr[Math.floor(Math.random()*arr.length)] : ''; }
+// state.storyArcs holds the user's editable copy of the narrative arcs — name,
+// description, and per-step draft phrase pools (one variant per line, picked
+// randomly on generate/regenerate). Seeded once from STORY_ARCS + STORY_DRAFTS
+// above; those consts are only ever used as seed data from here on, so the
+// person can rename, restyle, delete, or add arcs freely without touching code.
+// "trigger" has no pool here on purpose — it's always your Brand CTA (see
+// buildStoryItem) so regenerating it just means "reset to my current CTA".
+function defaultStoryArcsSeed(){
+  return STORY_ARCS.map((a, idx) => ({
+    id: uid(),
+    name: a.name,
+    desc: a.desc,
+    drafts: {
+      hook: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].hook || []).slice(),
+      context: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].context || []).slice(),
+      tensiune: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].tensiune || []).slice(),
+    },
+  }));
+}
 function todayArcIndex(){
   const d = new Date();
-  return (d.getDay() + 6) % 7; // Monday = 0, matches STORY_ARCS order
+  const n = state.storyArcs.length || 1;
+  return (d.getDay() + 6) % n; // Monday = 0, cycles through however many arcs currently exist
 }
 function sanitizeForInstagram(text){
   return String(text||'')
@@ -819,6 +839,8 @@ let state = {
   brand: { name: '', subtitle: '', keyword: '', ctaText: '', baseLink: '', dmConversions: 0, savedCTAs: [] },
   gamification: { xp: 0, milestonesShown: [] },
   storyVault: { items: [], weeklyFlags: {} },
+  storyArcs: [],
+  contentTypes: [],
 };
 let notesState = { items: [], activeId: null }; // kept separate from undo history
 let activeTab = 'dashboard';
@@ -1116,6 +1138,7 @@ function applyRecoveredKey(key, value){
     goal:'goal', calendar:'calendar', leads:'leads', content:'content', resources:'resources',
     activity:'activity', links:'links', trackedAccounts:'trackedAccounts', streak:'streak', ads:'ads', testimonials:'testimonials',
     shotList:'shotList', brand:'brand', gamification:'gamification', storyVault:'storyVault',
+    storyArcs:'storyArcs', contentTypes:'contentTypes',
   };
   if (key === 'leads') { state.leads = normalizeLeads(value); return; }
   if (key === 'notes') { notesState = value; return; }
@@ -1230,6 +1253,8 @@ function saveAll(){
   saveKey('brand', state.brand);
   saveKey('gamification', state.gamification);
   saveKey('storyVault', state.storyVault);
+  saveKey('storyArcs', state.storyArcs);
+  saveKey('contentTypes', state.contentTypes);
 }
 function saveNotes(){ saveKey('notes', notesState); }
 
@@ -1245,6 +1270,7 @@ function snapshotState(){
     leads: state.leads, content: state.content, resources: state.resources, activity: state.activity,
     links: state.links, trackedAccounts: state.trackedAccounts, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
     brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
+    storyArcs: state.storyArcs, contentTypes: state.contentTypes,
   }));
 }
 function applySnapshot(snap){
@@ -1260,6 +1286,8 @@ function applySnapshot(snap){
   if (state.brand.savedCTAs === undefined) state.brand.savedCTAs = [];
   state.gamification = snap.gamification || { xp: 0, milestonesShown: [] };
   state.storyVault = snap.storyVault || { items: [], weeklyFlags: {} };
+  state.storyArcs = (snap.storyArcs && snap.storyArcs.length) ? snap.storyArcs : defaultStoryArcsSeed();
+  state.contentTypes = (snap.contentTypes && snap.contentTypes.length) ? snap.contentTypes : defaultContentTypesSeed();
 }
 function pushUndo(){
   undoStack.push(snapshotState());
@@ -1334,6 +1362,7 @@ function buildExportPayload(){
       navOrder: state.navOrder, qualifyConfig: QUALIFY_FIELDS, settings: state.settings,
       streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
       brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
+      storyArcs: state.storyArcs, contentTypes: state.contentTypes,
     },
   };
 }
@@ -1364,6 +1393,8 @@ function applyImportedData(parsed){
   state.brand = d.brand || state.brand;
   state.gamification = d.gamification || state.gamification;
   state.storyVault = d.storyVault || state.storyVault;
+  state.storyArcs = (d.storyArcs && d.storyArcs.length) ? d.storyArcs : state.storyArcs;
+  state.contentTypes = (d.contentTypes && d.contentTypes.length) ? d.contentTypes : state.contentTypes;
   if (d.notes) notesState = d.notes;
   undoStack = []; redoStack = [];
   closeDataOverlays();
@@ -2467,14 +2498,18 @@ function convertVictoryToStory(leadId){
   const lead = state.leads.find(l => l.id === leadId);
   if (!lead) return;
   pushUndo();
-  const d = STORY_DRAFTS[2]; // Dovadă Socială / Victorie Client
+  // Prefer the live, editable arc (respects any renaming/edits the person made
+  // in "Tipuri de Story — ghid rapid"); fall back to the original built-in
+  // phrasing if that arc was since renamed away or deleted entirely.
+  const liveArc = state.storyArcs.find(a => a.name === 'Dovadă Socială / Victorie Client');
+  const d = (liveArc && liveArc.drafts) || STORY_DRAFTS[2];
   const item = {
     id: uid(), arcName: 'Dovadă Socială / Victorie Client', createdAt: new Date().toISOString(), date: todayISO(),
     steps: [
       { key: 'hook', label: 'Hook', text: 'Rezultatul lui ' + lead.name + ' chiar merită arătat 👇' },
       { key: 'context', label: 'Context', text: pickDraft(d.context) },
       { key: 'tensiune', label: 'Tensiune / Dovadă', text: (lead.value ? 'Rezultat: pachet de ' + formatEUR(lead.value) + '. ' : '') + pickDraft(d.tensiune) },
-      { key: 'trigger', label: 'Trigger DM', text: state.brand.ctaText || pickDraft(d.trigger) },
+      { key: 'trigger', label: 'Trigger DM', text: state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.') },
     ],
   };
   state.storyVault.items.unshift(item);
@@ -2800,12 +2835,11 @@ function computeDailyQuests(){
 ========================================================= */
 let editStoryId = null;
 function buildStoryItem(idx){
-  const arc = STORY_ARCS[idx];
-  const drafts = STORY_DRAFTS[idx];
+  const arc = state.storyArcs[idx] || state.storyArcs[0];
   return {
     id: uid(), arcIndex: idx, arcName: arc.name, createdAt: new Date().toISOString(),
     steps: STORY_STEPS.map(s => {
-      let text = pickDraft(drafts[s.key]) || '';
+      let text = s.key === 'trigger' ? '' : pickDraft(arc.drafts && arc.drafts[s.key]);
       if (s.key === 'trigger') {
         text = state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.');
       }
@@ -2819,7 +2853,7 @@ function generateStorySequence(dateIso){
   // recommendation) in the "Tip Story ghidaj" picker — it's a suggestion,
   // not a lock, so you can still change it on the generated card after.
   const presetType = getEffectiveDayStoryType(iso);
-  const presetIdx = presetType ? STORY_ARCS.findIndex(a => a.name === presetType) : -1;
+  const presetIdx = presetType ? state.storyArcs.findIndex(a => a.name === presetType) : -1;
   const idx = presetIdx >= 0 ? presetIdx : todayArcIndex();
   pushUndo();
   const item = buildStoryItem(idx);
@@ -2837,7 +2871,7 @@ function generateStorySequence(dateIso){
 function changeStoryArc(storyId, newArcName){
   const idx = state.storyVault.items.findIndex(s => s.id === storyId);
   if (idx < 0) return;
-  const newIdx = STORY_ARCS.findIndex(a => a.name === newArcName);
+  const newIdx = state.storyArcs.findIndex(a => a.name === newArcName);
   if (newIdx < 0) return;
   pushUndo();
   const originalDate = state.storyVault.items[idx].date;
@@ -2848,7 +2882,53 @@ function changeStoryArc(storyId, newArcName){
   saveKey('storyVault', state.storyVault);
   editStoryId = storyId;
   renderCalendar();
-  toast('Tip schimbat — draft nou generat pentru „'+STORY_ARCS[newIdx].name+'"');
+  toast('Tip schimbat — draft nou generat pentru „'+state.storyArcs[newIdx].name+'"');
+}
+// Regenerates a single step (Hook/Context/Tensiune) by picking a new random
+// variant from that arc's pool — different from the current text when the
+// pool has more than one option. "trigger" has no pool (see buildStoryItem);
+// regenerating it just resets it to your current Brand CTA, which is also a
+// legitimate use if you'd hand-edited it away and want the default back.
+function regenerateStoryStep(storyId, stepKey){
+  const item = state.storyVault.items.find(s => s.id === storyId);
+  if (!item) return;
+  const step = item.steps.find(s => s.key === stepKey);
+  if (!step) return;
+  if (stepKey === 'trigger') {
+    pushUndo();
+    step.text = state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.');
+    saveKey('storyVault', state.storyVault);
+    renderCalendar();
+    toast('Trigger resetat la CTA-ul tău din Brand');
+    return;
+  }
+  const arc = state.storyArcs.find(a => a.name === item.arcName);
+  const pool = (arc && arc.drafts && arc.drafts[stepKey]) ? arc.drafts[stepKey].filter(Boolean) : [];
+  if (!pool.length) { toast('Adaugă întâi variante pentru acest pas — în Ghid rapid, mai jos', 'error'); return; }
+  const alternatives = pool.filter(t => t !== step.text);
+  pushUndo();
+  step.text = alternatives.length ? pickDraft(alternatives) : pickDraft(pool);
+  saveKey('storyVault', state.storyVault);
+  renderCalendar();
+  toast('Pas regenerat');
+}
+// Regenerates the whole idea from scratch — same arc, brand-new random pick
+// for every step — without losing the card's identity/position or its date.
+function regenerateStoryIdea(storyId){
+  const idx = state.storyVault.items.findIndex(s => s.id === storyId);
+  if (idx < 0) return;
+  const item = state.storyVault.items[idx];
+  const arcIdx = state.storyArcs.findIndex(a => a.name === item.arcName);
+  if (arcIdx < 0) { toast('Nu găsesc arcul narativ al acestei idei', 'error'); return; }
+  pushUndo();
+  const fresh = buildStoryItem(arcIdx);
+  fresh.id = storyId;
+  fresh.date = item.date;
+  state.storyVault.items[idx] = fresh;
+  saveKey('storyVault', state.storyVault);
+  editStoryId = storyId;
+  renderCalendar();
+  toast('Idee regenerată de la 0');
 }
 let storyStepSaveTimer = null;
 function updateStoryStep(storyId, stepKey, value){
@@ -2861,6 +2941,62 @@ function updateStoryStep(storyId, stepKey, value){
 }
 function startEditStory(id){ editStoryId = id; renderCalendar(); }
 function finishEditStory(){ editStoryId = null; renderCalendar(); }
+
+/* =========================================================
+   MUTATIONS — Story Arcs (editable "Tipuri de Story — ghid rapid")
+   Lets the person rename/restyle/delete the built-in narrative arcs and
+   add their own, including the phrase pools the generator/regenerator
+   pick from for Hook/Context/Tensiune.
+========================================================= */
+let editingStoryArcId = null;
+function addStoryArc(){
+  pushUndo();
+  const arc = { id: uid(), name: 'Tip nou', desc: '', drafts: { hook: [], context: [], tensiune: [] } };
+  state.storyArcs.push(arc);
+  saveKey('storyArcs', state.storyArcs);
+  editingStoryArcId = arc.id;
+  renderCalendar();
+  toast('Tip nou adăugat — completează-l mai jos');
+  setTimeout(() => {
+    const el = document.getElementById('story-arc-' + arc.id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 80);
+}
+function startEditStoryArc(id){ editingStoryArcId = id; renderCalendar(); }
+function cancelEditStoryArc(){ editingStoryArcId = null; renderCalendar(); }
+function saveStoryArc(id){
+  const arc = state.storyArcs.find(a => a.id === id);
+  if (!arc) return;
+  const nameInput = document.getElementById('storyarc-name-' + id);
+  const descInput = document.getElementById('storyarc-desc-' + id);
+  const hookInput = document.getElementById('storyarc-hook-' + id);
+  const contextInput = document.getElementById('storyarc-context-' + id);
+  const tensiuneInput = document.getElementById('storyarc-tensiune-' + id);
+  const splitLines = (el) => el ? el.value.split('\n').map(t => t.trim()).filter(Boolean) : [];
+  if (!nameInput || !nameInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
+  pushUndo();
+  arc.name = nameInput.value.trim();
+  arc.desc = descInput ? descInput.value.trim() : arc.desc;
+  arc.drafts = {
+    hook: splitLines(hookInput),
+    context: splitLines(contextInput),
+    tensiune: splitLines(tensiuneInput),
+  };
+  saveKey('storyArcs', state.storyArcs);
+  editingStoryArcId = null;
+  renderCalendar();
+  toast('Tip salvat');
+}
+function deleteStoryArc(id){
+  if (state.storyArcs.length <= 1) { toast('Trebuie să rămână cel puțin un tip', 'error'); return; }
+  if (!confirm('Ștergi acest tip de Story? Ideile deja generate cu el rămân neschimbate, dar nu vei mai putea genera altele noi cu el.')) return;
+  pushUndo();
+  state.storyArcs = state.storyArcs.filter(a => a.id !== id);
+  if (editingStoryArcId === id) editingStoryArcId = null;
+  saveKey('storyArcs', state.storyArcs);
+  renderCalendar();
+  toast('Tip șters');
+}
 function deleteStorySequence(id){
   if (!confirm('Ștergi această secvență de Story? Nu poate fi recuperată.')) return;
   pushUndo();
@@ -2904,6 +3040,11 @@ function getCalendarDates(offsetDays){
   for (let i=0;i<CALENDAR_SPAN_DAYS;i++){ const d = new Date(start); d.setDate(start.getDate()+i); out.push(d); }
   return out;
 }
+const FUNNEL_STAGES = [
+  { key: 'tofu', label: 'TOFU — Atragere (rece)', color: '#60A5FA' },
+  { key: 'mofu', label: 'MOFU — Încredere (cald)', color: '#FBBF24' },
+  { key: 'bofu', label: 'BOFU — Conversie (fierbinte)', color: '#34D399' },
+];
 const CONTENT_TYPES = [
   { stage: 'TOFU — Atragere (rece)', color: '#60A5FA', items: [
     'Educativ / Tehnic',
@@ -2933,9 +3074,22 @@ const CONTENT_TYPES = [
     'Garanție / Risk Reversal',
   ]},
 ];
+// state.contentTypes holds the user's editable copy of the funnel-stage
+// content types (name + stage key), seeded once from CONTENT_TYPES above.
+// Everything that needs to display/select a content type reads the live,
+// editable list — CONTENT_TYPES itself is only ever used as seed data.
+function defaultContentTypesSeed(){
+  const stageKeys = ['tofu', 'mofu', 'bofu'];
+  const out = [];
+  CONTENT_TYPES.forEach((grp, i) => grp.items.forEach(name => out.push({ id: uid(), name, stage: stageKeys[i] || 'tofu' })));
+  return out;
+}
 function contentTypeStage(value){
-  const g = CONTENT_TYPES.find(grp => grp.items.includes(value));
-  return g || null;
+  const list = state.contentTypes || [];
+  const item = list.find(t => t.name === value);
+  if (!item) return null;
+  const stage = FUNNEL_STAGES.find(s => s.key === item.stage) || FUNNEL_STAGES[0];
+  return { stage: stage.label, color: stage.color };
 }
 const STORY_DAY_TYPES = [
   { stage: 'TOFU — Atragere', color: '#60A5FA', items: [
@@ -2996,6 +3150,56 @@ function getEffectiveDayStoryType(iso){
   const thisDate = new Date(iso + 'T00:00:00');
   const weeksDiff = Math.round((thisDate - anchor) / (7*24*60*60*1000));
   return (weeksDiff % repeatWeeks === 0) ? types : [];
+}
+
+/* =========================================================
+   MUTATIONS — Content Types (editable "Etapă funnel" options)
+   Managed via a dropdown in the Posts area (Content → Content), rather
+   than a chip list like Story's arcs — pick an existing type to edit it,
+   or "+ Adaugă tip nou" to create one.
+========================================================= */
+let funnelTypeManageId = null; // null = nothing picked, an id = editing that type, '__new__' = add form
+function selectFunnelTypeManage(value){
+  funnelTypeManageId = value || null;
+  renderCalendar();
+}
+function addContentType(){
+  const nameInput = document.getElementById('funnel-new-name');
+  const stageSelect = document.getElementById('funnel-new-stage');
+  if (!nameInput || !nameInput.value.trim()) { toast('Scrie un titlu pentru noul tip', 'error'); return; }
+  const name = nameInput.value.trim();
+  if (state.contentTypes.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Există deja un tip cu acest titlu', 'error'); return; }
+  pushUndo();
+  const type = { id: uid(), name, stage: stageSelect ? stageSelect.value : 'tofu' };
+  state.contentTypes.push(type);
+  saveKey('contentTypes', state.contentTypes);
+  funnelTypeManageId = type.id;
+  renderCalendar();
+  toast('Tip adăugat');
+}
+function saveContentType(id){
+  const type = state.contentTypes.find(t => t.id === id);
+  if (!type) return;
+  const nameInput = document.getElementById('funnel-edit-name-' + id);
+  const stageSelect = document.getElementById('funnel-edit-stage-' + id);
+  if (!nameInput || !nameInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
+  pushUndo();
+  type.name = nameInput.value.trim();
+  type.stage = stageSelect ? stageSelect.value : type.stage;
+  saveKey('contentTypes', state.contentTypes);
+  funnelTypeManageId = null;
+  renderCalendar();
+  toast('Tip salvat');
+}
+function deleteContentType(id){
+  if (state.contentTypes.length <= 1) { toast('Trebuie să rămână cel puțin un tip', 'error'); return; }
+  if (!confirm('Ștergi acest tip de conținut? Postările deja etichetate cu el rămân neschimbate.')) return;
+  pushUndo();
+  state.contentTypes = state.contentTypes.filter(t => t.id !== id);
+  funnelTypeManageId = null;
+  saveKey('contentTypes', state.contentTypes);
+  renderCalendar();
+  toast('Tip șters');
 }
 
 /* =========================================================
@@ -4312,7 +4516,7 @@ function onNotesInput(text){
 ========================================================= */
 async function resetAllData(){
   if (!confirm('Sigur vrei să ștergi toate datele salvate (tot — obiectiv, checklist, calendar, lead-uri, conținut, resurse, notițe, brand, gamification)? Această acțiune nu poate fi anulată. Poți exporta un backup înainte, din meniu.')) return;
-  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault')]);
+  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes')]);
   QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
   state = {
     goal: { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE },
@@ -4333,6 +4537,8 @@ async function resetAllData(){
     brand: { name:'', subtitle:'', keyword:'', ctaText:'', baseLink:'', dmConversions:0, savedCTAs:[] },
     gamification: { xp: 0, milestonesShown: [] },
     storyVault: { items: [], weeklyFlags: {} },
+    storyArcs: defaultStoryArcsSeed(),
+    contentTypes: defaultContentTypesSeed(),
   };
   notesState = seedNotes();
   undoStack = []; redoStack = [];
@@ -4961,11 +5167,13 @@ function renderContentPosts(){
       '</div>' +
       '<select data-daytype="'+iso+'" class="mb-1" style="font-size:11px; margin-bottom:6px; color:'+(dayType ? (contentTypeStage(dayType)||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
         '<option value="">Etapă funnel — nesetat</option>' +
-        CONTENT_TYPES.map(grp =>
-          '<optgroup label="'+grp.stage+'">' +
-            grp.items.map(ct => '<option value="'+escapeAttr(ct)+'" '+(ct===dayType?'selected':'')+'>'+escapeHtml(ct)+'</option>').join('') +
-          '</optgroup>'
-        ).join('') +
+        FUNNEL_STAGES.map(stage => {
+          const items = state.contentTypes.filter(t => t.stage === stage.key);
+          if (!items.length) return '';
+          return '<optgroup label="'+stage.label+'">' +
+            items.map(t => '<option value="'+escapeAttr(t.name)+'" '+(t.name===dayType?'selected':'')+'>'+escapeHtml(t.name)+'</option>').join('') +
+          '</optgroup>';
+        }).join('') +
       '</select>' +
       (dayType && contentTypeStage(dayType)
         ? '<p class="text-xs mb-3" style="margin-bottom:14px; color:'+contentTypeStage(dayType).color+'; font-weight:600;">'+contentTypeStage(dayType).stage.split(' — ')[0]+(dayTypeIsRecommended?' <span class="mute3" style="font-weight:400; font-style:italic;">· recomandat</span>':'')+'</p>'
@@ -5274,6 +5482,50 @@ function renderContentPosts(){
         : '<p class="text-xs mute3 italic">Nicio idee adăugată încă în Shot List.</p>') +
     '</div>' +
 
+    '<div class="card">' +
+      '<h3 class="h2 mb-1" style="margin-bottom:4px;">Etape Funnel — gestionează tipurile</h3>' +
+      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Tipurile din selectorul „Etapă funnel" de mai sus — alege unul ca să-i schimbi titlul sau etapa, sau adaugă unul nou.</p>' +
+      '<select id="funnel-type-manage-select" style="margin-bottom:10px;">' +
+        '<option value="">— alege un tip de editat —</option>' +
+        '<option value="__new__"'+(funnelTypeManageId==='__new__'?' selected':'')+'>+ Adaugă tip nou</option>' +
+        FUNNEL_STAGES.map(stage => {
+          const items = state.contentTypes.filter(t => t.stage === stage.key);
+          if (!items.length) return '';
+          return '<optgroup label="'+stage.label+'">' +
+            items.map(t => '<option value="'+t.id+'"'+(funnelTypeManageId===t.id?' selected':'')+'>'+escapeHtml(t.name)+'</option>').join('') +
+          '</optgroup>';
+        }).join('') +
+      '</select>' +
+      (funnelTypeManageId === '__new__'
+        ? '<div style="background:rgba(0,0,0,.2); border-radius:8px; padding:10px;">' +
+            '<label class="field-label">Titlu</label>' +
+            '<input id="funnel-new-name" type="text" placeholder="ex: Provocare 7 zile" style="margin-bottom:8px;" />' +
+            '<label class="field-label">Etapă</label>' +
+            '<select id="funnel-new-stage" style="margin-bottom:10px;">' +
+              FUNNEL_STAGES.map(stage => '<option value="'+stage.key+'">'+stage.label+'</option>').join('') +
+            '</select>' +
+            '<button data-action="add-content-type" class="btn btn-sm btn-primary w-full" style="justify-content:center;">Adaugă</button>' +
+          '</div>'
+        : '') +
+      (funnelTypeManageId && funnelTypeManageId !== '__new__' && state.contentTypes.some(t => t.id === funnelTypeManageId)
+        ? (() => {
+            const t = state.contentTypes.find(x => x.id === funnelTypeManageId);
+            return '<div style="background:rgba(0,0,0,.2); border-radius:8px; padding:10px;">' +
+              '<label class="field-label">Titlu</label>' +
+              '<input id="funnel-edit-name-'+t.id+'" type="text" value="'+escapeAttr(t.name)+'" style="margin-bottom:8px;" />' +
+              '<label class="field-label">Etapă</label>' +
+              '<select id="funnel-edit-stage-'+t.id+'" style="margin-bottom:10px;">' +
+                FUNNEL_STAGES.map(stage => '<option value="'+stage.key+'"'+(stage.key===t.stage?' selected':'')+'>'+stage.label+'</option>').join('') +
+              '</select>' +
+              '<div class="flex gap-2">' +
+                '<button data-action="save-content-type" data-id="'+t.id+'" class="btn btn-sm btn-primary flex-1" style="justify-content:center;">Salvează</button>' +
+                '<button data-action="delete-content-type" data-id="'+t.id+'" class="btn btn-sm danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
+              '</div>' +
+            '</div>';
+          })()
+        : '') +
+    '</div>' +
+
   '</div>';
 }
 function renderContentStory(){
@@ -5334,10 +5586,17 @@ function renderContentStory(){
             return '<div id="story-block-'+item.id+'" class="card" style="background:rgba(0,0,0,.22); border-color:var(--accent-border);">' +
               '<label class="field-label">Tip Story (arc narativ)</label>' +
               '<select data-storyarcselect="'+item.id+'" style="margin-bottom:10px;">' +
-                STORY_ARCS.map(a => '<option value="'+escapeAttr(a.name)+'" '+(a.name===item.arcName?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('') +
+                state.storyArcs.map(a => '<option value="'+escapeAttr(a.name)+'" '+(a.name===item.arcName?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('') +
               '</select>' +
-              item.steps.map(s => '<div class="mt-2" style="margin-top:8px;"><label class="field-label">'+s.label+'</label><textarea data-story="'+item.id+'" data-storystep="'+s.key+'" placeholder="'+STORY_STEPS.find(x=>x.key===s.key).hint+'" style="min-height:50px;">'+escapeHtml(s.text)+'</textarea></div>').join('') +
-              '<button data-action="finish-edit-story" class="btn btn-sm btn-primary w-full mt-3" style="justify-content:center;">Gata</button>' +
+              item.steps.map(s => '<div class="mt-2" style="margin-top:8px;">' +
+                '<div class="flex items-center justify-between">' +
+                  '<label class="field-label" style="margin-bottom:0;">'+s.label+'</label>' +
+                  '<button data-action="regenerate-story-step" data-id="'+item.id+'" data-step="'+s.key+'" class="icon-btn" aria-label="Regenerează" title="Regenerează doar acest pas">'+icon('refresh','icon-sm')+'</button>' +
+                '</div>' +
+                '<textarea data-story="'+item.id+'" data-storystep="'+s.key+'" placeholder="'+STORY_STEPS.find(x=>x.key===s.key).hint+'" style="min-height:50px;">'+escapeHtml(s.text)+'</textarea>' +
+              '</div>').join('') +
+              '<button data-action="regenerate-story-idea" data-id="'+item.id+'" class="btn btn-dashed btn-sm w-full mt-3" style="justify-content:center;">'+icon('refresh','icon-sm')+'Regenerează tot, de la 0</button>' +
+              '<button data-action="finish-edit-story" class="btn btn-sm btn-primary w-full mt-2" style="justify-content:center;">Gata</button>' +
             '</div>';
           }
           const filled = item.steps.filter(s=>s.text.trim()).length;
@@ -5385,15 +5644,45 @@ function renderContentStory(){
 
     '<div class="card">' +
       '<h3 class="h2 mb-1" style="margin-bottom:4px;">Tipuri de Story — ghid rapid</h3>' +
-      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Cele 7 arcuri narative din care alegi când generezi o secvență — fiecare cu structura Hook → Context → Dovadă → Trigger.</p>' +
+      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Arcurile narative din care alegi când generezi o secvență — fiecare cu structura Hook → Context → Dovadă → Trigger. Editează-le, șterge-le sau adaugă altele noi — variantele de mai jos (una pe linie) sunt exact ce alege la întâmplare butonul de regenerare.</p>' +
       '<div class="flex-col gap-3" style="display:flex;">' +
-        STORY_ARCS.map(a => (
-          '<div class="chip">' +
-            '<p class="text-sm" style="font-weight:700; color:var(--accent);">'+escapeHtml(a.name)+'</p>' +
-            '<p class="text-xs mute2 mt-1" style="margin-top:4px;">'+escapeHtml(a.desc)+'</p>' +
-          '</div>'
-        )).join('') +
+        state.storyArcs.map(a => {
+          const isEditingArc = editingStoryArcId === a.id;
+          if (isEditingArc) {
+            return '<div id="story-arc-'+a.id+'" class="chip" style="border-color:var(--accent-border);">' +
+              '<label class="field-label">Titlu</label>' +
+              '<input id="storyarc-name-'+a.id+'" type="text" value="'+escapeAttr(a.name)+'" style="margin-bottom:8px;" />' +
+              '<label class="field-label">Descriere</label>' +
+              '<textarea id="storyarc-desc-'+a.id+'" style="min-height:44px; margin-bottom:8px;">'+escapeHtml(a.desc)+'</textarea>' +
+              '<label class="field-label">Hook — variante (una pe linie)</label>' +
+              '<textarea id="storyarc-hook-'+a.id+'" style="min-height:60px; margin-bottom:8px; font-size:12px;">'+escapeHtml((a.drafts.hook||[]).join('\n'))+'</textarea>' +
+              '<label class="field-label">Context — variante (una pe linie)</label>' +
+              '<textarea id="storyarc-context-'+a.id+'" style="min-height:60px; margin-bottom:8px; font-size:12px;">'+escapeHtml((a.drafts.context||[]).join('\n'))+'</textarea>' +
+              '<label class="field-label">Tensiune / Dovadă — variante (una pe linie)</label>' +
+              '<textarea id="storyarc-tensiune-'+a.id+'" style="min-height:60px; margin-bottom:10px; font-size:12px;">'+escapeHtml((a.drafts.tensiune||[]).join('\n'))+'</textarea>' +
+              '<div class="flex gap-2">' +
+                '<button data-action="save-story-arc" data-id="'+a.id+'" class="btn btn-sm btn-primary flex-1">Salvează</button>' +
+                '<button data-action="cancel-edit-story-arc" class="btn btn-sm">Anulează</button>' +
+              '</div>' +
+            '</div>';
+          }
+          const poolCount = ['hook','context','tensiune'].map(k => (a.drafts[k]||[]).length);
+          return '<div id="story-arc-'+a.id+'" class="chip">' +
+            '<div class="flex items-start justify-between gap-2">' +
+              '<div style="min-width:0;">' +
+                '<p class="text-sm" style="font-weight:700; color:var(--accent);">'+escapeHtml(a.name)+'</p>' +
+                (a.desc ? '<p class="text-xs mute2 mt-1" style="margin-top:4px;">'+escapeHtml(a.desc)+'</p>' : '') +
+                '<p class="text-xs mute3 mt-1" style="margin-top:4px;">'+poolCount[0]+' variante Hook · '+poolCount[1]+' Context · '+poolCount[2]+' Tensiune</p>' +
+              '</div>' +
+              '<div class="row-actions shrink-0">' +
+                '<button data-action="edit-story-arc" data-id="'+a.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
+                '<button data-action="delete-story-arc" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
       '</div>' +
+      '<button data-action="add-story-arc" class="btn btn-dashed btn-sm w-full mt-3" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă tip nou</button>' +
     '</div>' +
   '</div>';
 }
@@ -7444,6 +7733,16 @@ function onContentClick(e){
   else if (action === 'finish-edit-story') finishEditStory();
   else if (action === 'delete-story-sequence') deleteStorySequence(el.dataset.id);
   else if (action === 'copy-story-sequence') copyStorySequence(el.dataset.id);
+  else if (action === 'regenerate-story-step') regenerateStoryStep(el.dataset.id, el.dataset.step);
+  else if (action === 'regenerate-story-idea') regenerateStoryIdea(el.dataset.id);
+  else if (action === 'add-story-arc') addStoryArc();
+  else if (action === 'edit-story-arc') startEditStoryArc(el.dataset.id);
+  else if (action === 'cancel-edit-story-arc') cancelEditStoryArc();
+  else if (action === 'save-story-arc') saveStoryArc(el.dataset.id);
+  else if (action === 'delete-story-arc') deleteStoryArc(el.dataset.id);
+  else if (action === 'add-content-type') addContentType();
+  else if (action === 'save-content-type') saveContentType(el.dataset.id);
+  else if (action === 'delete-content-type') deleteContentType(el.dataset.id);
   else if (action === 'toggle-weekly-flag') toggleWeeklyFlag(el.dataset.flag);
   else if (action === 'open-filming-mode') openFilmingMode();
   else if (action === 'toggle-filming-energy') { const i=filmingEnergyFilter.indexOf(el.dataset.effort); if(i>=0) filmingEnergyFilter.splice(i,1); else filmingEnergyFilter.push(el.dataset.effort); renderFilmingMode(); }
@@ -7665,6 +7964,7 @@ function onContentChange(e){
   if (dayStoryTypeEl) { setDayStoryType(dayStoryTypeEl.dataset.daystorytype, Number(dayStoryTypeEl.dataset.storyslot), dayStoryTypeEl.value); renderCalendar(); return; }
   const storyArcEl = e.target.closest('[data-storyarcselect]');
   if (storyArcEl) { changeStoryArc(storyArcEl.dataset.storyarcselect, storyArcEl.value); return; }
+  if (e.target && e.target.id === 'funnel-type-manage-select') { selectFunnelTypeManage(e.target.value); return; }
   const fileEl = e.target.closest('[data-action-file]');
   if (fileEl) {
     const kind = fileEl.dataset.actionFile;
@@ -7874,7 +8174,7 @@ function onScrollForFab(){
 }
 
 async function init(){
-  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault] = await Promise.all([
+  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes] = await Promise.all([
     loadKey('goal', null),
     loadKey('checklist', null),
     loadKey('calendar', { posts: [] }),
@@ -7897,6 +8197,8 @@ async function init(){
     loadKey('brand', null),
     loadKey('gamification', null),
     loadKey('storyVault', null),
+    loadKey('storyArcs', null),
+    loadKey('contentTypes', null),
   ]);
 
   state.goal = goal || { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE };
@@ -7945,6 +8247,8 @@ async function init(){
   state.gamification = gamification || { xp: 0, milestonesShown: [] };
   state.storyVault = storyVault || { items: [], weeklyFlags: {} };
   if (state.storyVault.weeklyFlags === undefined) state.storyVault.weeklyFlags = {};
+  state.storyArcs = (storyArcs && storyArcs.length) ? storyArcs : defaultStoryArcsSeed();
+  state.contentTypes = (contentTypes && contentTypes.length) ? contentTypes : defaultContentTypesSeed();
   // Backfill: older story items were created before "date" existed — assign
   // them their creation date so they still show up in the right day column
   // instead of vanishing from the new per-day Story view.
