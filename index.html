@@ -459,6 +459,7 @@ const ICONS = {
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   flame: '<path d="M12 2c1 3-2 4-2 7a3 3 0 0 0 6 0c0-1-.5-2-.5-2 1.5 1 2.5 3 2.5 5a6 6 0 0 1-12 0c0-4 3-5 3-8 0-1-.3-2-.3-2S11 1 12 2z" fill="currentColor" stroke="none"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="m21 15-5-5L5 21"/>',
 };
 
 function icon(name, size){
@@ -841,6 +842,7 @@ let state = {
   storyVault: { items: [], weeklyFlags: {} },
   storyArcs: [],
   contentTypes: [],
+  scrollStoppers: [],
 };
 let notesState = { items: [], activeId: null }; // kept separate from undo history
 let activeTab = 'dashboard';
@@ -1138,7 +1140,7 @@ function applyRecoveredKey(key, value){
     goal:'goal', calendar:'calendar', leads:'leads', content:'content', resources:'resources',
     activity:'activity', links:'links', trackedAccounts:'trackedAccounts', streak:'streak', ads:'ads', testimonials:'testimonials',
     shotList:'shotList', brand:'brand', gamification:'gamification', storyVault:'storyVault',
-    storyArcs:'storyArcs', contentTypes:'contentTypes',
+    storyArcs:'storyArcs', contentTypes:'contentTypes', scrollStoppers:'scrollStoppers',
   };
   if (key === 'leads') { state.leads = normalizeLeads(value); return; }
   if (key === 'notes') { notesState = value; return; }
@@ -1255,6 +1257,7 @@ function saveAll(){
   saveKey('storyVault', state.storyVault);
   saveKey('storyArcs', state.storyArcs);
   saveKey('contentTypes', state.contentTypes);
+  saveKey('scrollStoppers', state.scrollStoppers);
 }
 function saveNotes(){ saveKey('notes', notesState); }
 
@@ -1270,7 +1273,7 @@ function snapshotState(){
     leads: state.leads, content: state.content, resources: state.resources, activity: state.activity,
     links: state.links, trackedAccounts: state.trackedAccounts, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
     brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
-    storyArcs: state.storyArcs, contentTypes: state.contentTypes,
+    storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
   }));
 }
 function applySnapshot(snap){
@@ -1288,6 +1291,7 @@ function applySnapshot(snap){
   state.storyVault = snap.storyVault || { items: [], weeklyFlags: {} };
   state.storyArcs = (snap.storyArcs && snap.storyArcs.length) ? snap.storyArcs : defaultStoryArcsSeed();
   state.contentTypes = (snap.contentTypes && snap.contentTypes.length) ? snap.contentTypes : defaultContentTypesSeed();
+  state.scrollStoppers = snap.scrollStoppers || [];
 }
 function pushUndo(){
   undoStack.push(snapshotState());
@@ -1362,7 +1366,7 @@ function buildExportPayload(){
       navOrder: state.navOrder, qualifyConfig: QUALIFY_FIELDS, settings: state.settings,
       streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
       brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
-      storyArcs: state.storyArcs, contentTypes: state.contentTypes,
+      storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
     },
   };
 }
@@ -1395,6 +1399,7 @@ function applyImportedData(parsed){
   state.storyVault = d.storyVault || state.storyVault;
   state.storyArcs = (d.storyArcs && d.storyArcs.length) ? d.storyArcs : state.storyArcs;
   state.contentTypes = (d.contentTypes && d.contentTypes.length) ? d.contentTypes : state.contentTypes;
+  state.scrollStoppers = d.scrollStoppers || state.scrollStoppers;
   if (d.notes) notesState = d.notes;
   undoStack = []; redoStack = [];
   closeDataOverlays();
@@ -4516,7 +4521,7 @@ function onNotesInput(text){
 ========================================================= */
 async function resetAllData(){
   if (!confirm('Sigur vrei să ștergi toate datele salvate (tot — obiectiv, checklist, calendar, lead-uri, conținut, resurse, notițe, brand, gamification)? Această acțiune nu poate fi anulată. Poți exporta un backup înainte, din meniu.')) return;
-  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes')]);
+  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes'), deleteKey('scrollStoppers')]);
   QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
   state = {
     goal: { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE },
@@ -4539,6 +4544,7 @@ async function resetAllData(){
     storyVault: { items: [], weeklyFlags: {} },
     storyArcs: defaultStoryArcsSeed(),
     contentTypes: defaultContentTypesSeed(),
+    scrollStoppers: [],
   };
   notesState = seedNotes();
   undoStack = []; redoStack = [];
@@ -6254,6 +6260,116 @@ function resizeImageFileToDataUrl(file, size, quality){
     reader.readAsDataURL(file);
   });
 }
+// Unlike resizeImageFileToDataUrl (which center-crops to a square, good for
+// round profile photos), this scales down preserving the original aspect
+// ratio and never crops — needed for presentation screenshots (Scroll
+// Stopper hook examples) which are usually tall Instagram post crops where
+// cutting anything off would lose the actual hook text.
+function resizeImageFileToDataUrlFit(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+/* =========================================================
+   MUTATIONS — Scroll Stopper (hook-type reference library, Resurse)
+========================================================= */
+let pendingScrollStopperImage = null;
+let editingScrollStopperId = null;
+function handleScrollStopperImageSelect(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
+  if (file.size > 8*1024*1024) { toast('Poza e prea mare (max 8MB)', 'error'); return; }
+  resizeImageFileToDataUrlFit(file, 640, 0.85).then(dataUrl => {
+    pendingScrollStopperImage = dataUrl;
+    renderResources();
+  }).catch(() => toast('Nu am putut încărca poza', 'error'));
+}
+function removePendingScrollStopperImage(){
+  pendingScrollStopperImage = null;
+  renderResources();
+}
+function addScrollStopper(){
+  const titleInput = document.getElementById('new-scrollstopper-title');
+  const descInput = document.getElementById('new-scrollstopper-desc');
+  if (!titleInput || !titleInput.value.trim()) { toast('Scrie un titlu pentru tipul de hook', 'error'); return; }
+  pushUndo();
+  state.scrollStoppers.unshift({
+    id: uid(),
+    title: titleInput.value.trim(),
+    description: descInput ? descInput.value.trim() : '',
+    image: pendingScrollStopperImage,
+    addedAt: new Date().toISOString(),
+  });
+  pendingScrollStopperImage = null;
+  saveKey('scrollStoppers', state.scrollStoppers);
+  render();
+  toast('Hook adăugat în Scroll Stopper');
+}
+function startEditScrollStopper(id){ editingScrollStopperId = id; renderResources(); }
+function cancelEditScrollStopper(){ editingScrollStopperId = null; renderResources(); }
+function saveScrollStopper(id){
+  const item = state.scrollStoppers.find(s => s.id === id);
+  if (!item) return;
+  const titleInput = document.getElementById('edit-scrollstopper-title-' + id);
+  const descInput = document.getElementById('edit-scrollstopper-desc-' + id);
+  if (!titleInput || !titleInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
+  pushUndo();
+  item.title = titleInput.value.trim();
+  item.description = descInput ? descInput.value.trim() : item.description;
+  saveKey('scrollStoppers', state.scrollStoppers);
+  editingScrollStopperId = null;
+  renderResources();
+  toast('Salvat');
+}
+function deleteScrollStopper(id){
+  if (!confirm('Ștergi acest tip de hook din Scroll Stopper?')) return;
+  pushUndo();
+  state.scrollStoppers = state.scrollStoppers.filter(s => s.id !== id);
+  if (editingScrollStopperId === id) editingScrollStopperId = null;
+  saveKey('scrollStoppers', state.scrollStoppers);
+  renderResources();
+  toast('Șters');
+}
+function handleScrollStopperImageReplace(id, input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
+  if (file.size > 8*1024*1024) { toast('Poza e prea mare (max 8MB)', 'error'); return; }
+  resizeImageFileToDataUrlFit(file, 640, 0.85).then(dataUrl => {
+    pushUndo();
+    const item = state.scrollStoppers.find(s => s.id === id);
+    if (item) item.image = dataUrl;
+    saveKey('scrollStoppers', state.scrollStoppers);
+    renderResources();
+  }).catch(() => toast('Nu am putut încărca poza', 'error'));
+}
+function deleteScrollStopperImage(id){
+  pushUndo();
+  const item = state.scrollStoppers.find(s => s.id === id);
+  if (item) item.image = null;
+  saveKey('scrollStoppers', state.scrollStoppers);
+  renderResources();
+}
 function handleAccountPhotoSelect(id, input){
   const file = input.files && input.files[0];
   input.value = '';
@@ -7145,6 +7261,68 @@ function renderResources(){
     '</p>';
   }).join('');
 
+  const scrollStopperCardHtml = (s) => {
+    const isEditing = editingScrollStopperId === s.id;
+    if (isEditing) {
+      return '<div class="card" style="border-color:var(--accent-border);">' +
+        '<label class="field-label">Titlu</label><input id="edit-scrollstopper-title-'+s.id+'" type="text" value="'+escapeAttr(s.title)+'" style="margin-bottom:8px;" />' +
+        '<label class="field-label">Descriere</label><textarea id="edit-scrollstopper-desc-'+s.id+'" style="min-height:70px; margin-bottom:8px;">'+escapeHtml(s.description||'')+'</textarea>' +
+        '<label class="field-label">Imagine de prezentare</label>' +
+        '<div class="flex items-center gap-2" style="margin-bottom:8px;">' +
+          (s.image ? '<img src="'+escapeAttr(s.image)+'" alt="" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid var(--line);" />' : '') +
+          '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+(s.image?'Schimbă poza':'Adaugă poză')+
+            '<input type="file" accept="image/*" data-action-file="existing-scrollstopper-image" data-id="'+s.id+'" style="display:none;" />' +
+          '</label>' +
+          (s.image ? '<button data-action="delete-scrollstopper-image" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge poza">'+icon('trash','icon-sm')+'</button>' : '') +
+        '</div>' +
+        '<div class="flex justify-end gap-2">' +
+          '<button data-action="save-scrollstopper" data-id="'+s.id+'" class="btn btn-sm btn-primary">Salvează</button>' +
+          '<button data-action="cancel-edit-scrollstopper" class="btn btn-sm">Anulează</button>' +
+        '</div>' +
+      '</div>';
+    }
+    return '<div class="card" style="padding:0; overflow:hidden;">' +
+      (s.image
+        ? '<img src="'+escapeAttr(s.image)+'" alt="" style="width:100%; max-height:220px; object-fit:cover; display:block;" />'
+        : '<div style="width:100%; height:90px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.04); color:var(--text-faint);">'+icon('image','icon')+'</div>') +
+      '<div style="padding:14px;">' +
+        '<div class="flex items-start justify-between gap-3">' +
+          '<p class="text-sm flex-1" style="font-weight:700; color:rgba(245,245,240,.9);">'+escapeHtml(s.title)+'</p>' +
+          '<div class="row-actions shrink-0">' +
+            '<button data-action="edit-scrollstopper" data-id="'+s.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
+            '<button data-action="delete-scrollstopper" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
+          '</div>' +
+        '</div>' +
+        (s.description ? '<p class="text-xs muted mt-1" style="line-height:1.5; margin-top:6px;">'+escapeHtml(s.description)+'</p>' : '') +
+      '</div>' +
+    '</div>';
+  };
+  const scrollStoppersHtml =
+    '<div class="card" style="border-top:3px solid var(--accent-border);">' +
+      '<p class="eyebrow" style="margin-bottom:4px;">⚡ Scroll Stopper — tipuri de hook-uri care merg acum</p>' +
+      '<p class="text-xs mute3" style="margin-bottom:12px;">Salvează aici tipurile de hook care opresc scroll-ul chiar acum, cu o descriere și un exemplu vizual, ca să le ai la îndemână când scrii un script nou.</p>' +
+      '<div class="card-dashed" style="padding:14px; margin-bottom:14px;">' +
+        '<label class="field-label">Titlu tip de hook</label>' +
+        '<input id="new-scrollstopper-title" type="text" placeholder="Ex: Întrebare controversată" style="margin-bottom:8px;" />' +
+        '<label class="field-label">Descriere</label>' +
+        '<textarea id="new-scrollstopper-desc" placeholder="Cum funcționează, de ce oprește scroll-ul…" style="min-height:60px; margin-bottom:8px;"></textarea>' +
+        '<label class="field-label">Imagine de prezentare (opțional)</label>' +
+        '<div class="flex items-center gap-2" style="margin-bottom:10px;">' +
+          (pendingScrollStopperImage
+            ? ('<img src="'+escapeAttr(pendingScrollStopperImage)+'" alt="" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid var(--line);" />' +
+               '<button data-action="remove-pending-scrollstopper-image" class="icon-btn danger" aria-label="Șterge poza">'+icon('trash','icon-sm')+'</button>')
+            : '') +
+          '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+(pendingScrollStopperImage?'Schimbă poza':'Adaugă poză')+
+            '<input type="file" accept="image/*" data-action-file="new-scrollstopper-image" style="display:none;" />' +
+          '</label>' +
+        '</div>' +
+        '<button data-action="add-scrollstopper" class="btn btn-primary w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă în Scroll Stopper</button>' +
+      '</div>' +
+      (state.scrollStoppers.length
+        ? '<div class="grid grid-1-2">' + state.scrollStoppers.map(scrollStopperCardHtml).join('') + '</div>'
+        : '<p class="text-xs mute3 italic">Niciun tip de hook salvat încă.</p>') +
+    '</div>';
+
   const newGroupBlock = newGroupInputOpen
     ? '<div class="card-dashed" style="padding:14px;">' +
         '<div class="flex gap-2">' +
@@ -7186,6 +7364,8 @@ function renderResources(){
           '</div>'
         : '') +
     '</div>' +
+
+    scrollStoppersHtml +
   '</div>';
 }
 
@@ -7770,6 +7950,13 @@ function onContentClick(e){
   else if (action === 'toggle-pin-template') togglePinTemplate(el.dataset.id);
   else if (action === 'add-mindset-note') addMindsetNote();
   else if (action === 'delete-mindset-note') deleteMindsetNote(el.dataset.id);
+  else if (action === 'add-scrollstopper') addScrollStopper();
+  else if (action === 'remove-pending-scrollstopper-image') removePendingScrollStopperImage();
+  else if (action === 'edit-scrollstopper') startEditScrollStopper(el.dataset.id);
+  else if (action === 'cancel-edit-scrollstopper') cancelEditScrollStopper();
+  else if (action === 'save-scrollstopper') saveScrollStopper(el.dataset.id);
+  else if (action === 'delete-scrollstopper') deleteScrollStopper(el.dataset.id);
+  else if (action === 'delete-scrollstopper-image') deleteScrollStopperImage(el.dataset.id);
   else if (action === 'open-add-group') { newGroupInputOpen = true; renderResources(); }
   else if (action === 'cancel-add-group') { newGroupInputOpen = false; renderResources(); }
   else if (action === 'confirm-add-group') addGroup();
@@ -7971,6 +8158,8 @@ function onContentChange(e){
     if (kind === 'new-testimonial-media') handleTestimonialMediaSelect(fileEl);
     else if (kind === 'existing-testimonial-media') handleExistingTestimonialMediaSelect(fileEl.dataset.id, fileEl);
     else if (kind === 'account-photo') handleAccountPhotoSelect(fileEl.dataset.id, fileEl);
+    else if (kind === 'new-scrollstopper-image') handleScrollStopperImageSelect(fileEl);
+    else if (kind === 'existing-scrollstopper-image') handleScrollStopperImageReplace(fileEl.dataset.id, fileEl);
     return;
   }
   if (e.target && e.target.id === 'import-file-input' && e.target.files && e.target.files[0]) {
@@ -8174,7 +8363,7 @@ function onScrollForFab(){
 }
 
 async function init(){
-  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes] = await Promise.all([
+  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes, scrollStoppers] = await Promise.all([
     loadKey('goal', null),
     loadKey('checklist', null),
     loadKey('calendar', { posts: [] }),
@@ -8199,6 +8388,7 @@ async function init(){
     loadKey('storyVault', null),
     loadKey('storyArcs', null),
     loadKey('contentTypes', null),
+    loadKey('scrollStoppers', []),
   ]);
 
   state.goal = goal || { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE };
@@ -8249,6 +8439,7 @@ async function init(){
   if (state.storyVault.weeklyFlags === undefined) state.storyVault.weeklyFlags = {};
   state.storyArcs = (storyArcs && storyArcs.length) ? storyArcs : defaultStoryArcsSeed();
   state.contentTypes = (contentTypes && contentTypes.length) ? contentTypes : defaultContentTypesSeed();
+  state.scrollStoppers = scrollStoppers || [];
   // Backfill: older story items were created before "date" existed — assign
   // them their creation date so they still show up in the right day column
   // instead of vanishing from the new per-day Story view.
