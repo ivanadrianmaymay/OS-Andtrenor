@@ -1432,29 +1432,63 @@ function copyDataToClipboard(){
   copyToClipboard(JSON.stringify(payload));
   markBackedUp();
 }
+// Text relayed between devices through a messaging app or notes app (which is
+// the whole point of the copy/paste flow, since a phone's OS clipboard isn't
+// shared with a computer's) very often comes back mangled: autocorrect turns
+// straight quotes into curly "smart" quotes, a BOM or zero-width character
+// sneaks in, or the app adds its own text around the JSON (a caption, a
+// forwarded-message header). None of that means the data itself is gone —
+// so we normalize it and, if that's still not valid JSON, try pulling out
+// just the outermost {...} block before giving up.
+function sanitizeImportText(text){
+  if (!text) return text;
+  let t = text;
+  t = t.replace(/[﻿​‌‍]/g, '');
+  t = t.replace(/[‘’‚‛]/g, "'").replace(/[“”„‟]/g, '"');
+  t = t.replace(/ /g, ' ');
+  return t.trim();
+}
+function tryParseImportJson(rawText){
+  const cleaned = sanitizeImportText(rawText);
+  try { return { ok: true, data: JSON.parse(cleaned) }; } catch(e){}
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return { ok: true, data: JSON.parse(cleaned.slice(start, end + 1)) }; } catch(e){}
+  }
+  return { ok: false };
+}
 async function pasteDataFromClipboard(){
   try {
-    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea din clipboard aici — folosește Import din fișier.', 'error'); return; }
+    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea din clipboard aici — folosește lipirea manuală de mai jos sau Import din fișier.', 'error'); return; }
     const text = await navigator.clipboard.readText();
-    let parsed;
-    try { parsed = JSON.parse(text); }
-    catch(e){ toast('Ce e în clipboard nu e un JSON valid', 'error'); return; }
+    const result = tryParseImportJson(text);
+    if (!result.ok) { toast('Ce e în clipboard nu e un JSON valid — s-ar putea să nu fie chiar ce ai copiat pe telefon (clipboard-ul nu e comun între telefon și calculator). Încearcă lipirea manuală de mai jos.', 'error'); return; }
     if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite din clipboard? Datele curente se pierd.')) return;
-    const ok = applyImportedData(parsed);
+    const ok = applyImportedData(result.data);
     toast(ok ? 'Date importate din clipboard' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
     if (ok) closeSync();
-  } catch(e){ toast('Nu am putut citi din clipboard — permite accesul sau folosește fișier', 'error'); }
+  } catch(e){ toast('Nu am putut citi din clipboard — permite accesul sau folosește lipirea manuală de mai jos', 'error'); }
+}
+function importDataFromManualText(){
+  const el = document.getElementById('manual-import-text');
+  if (!el || !el.value.trim()) { toast('Lipește mai întâi textul JSON în căsuță', 'error'); return; }
+  const result = tryParseImportJson(el.value);
+  if (!result.ok) { toast('Textul lipit nu e un JSON valid — verifică dacă ai copiat tot, de la prima { până la ultima }', 'error'); return; }
+  if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite? Datele curente se pierd.')) return;
+  const ok = applyImportedData(result.data);
+  toast(ok ? 'Date importate' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
+  if (ok) { el.value = ''; closeSync(); }
 }
 function triggerImport(){ document.getElementById('import-file-input').click(); }
 function handleImportFile(file){
   const reader = new FileReader();
   reader.onload = () => {
-    let parsed;
-    try { parsed = JSON.parse(reader.result); }
-    catch(e){ toast('Fișierul nu e un JSON valid', 'error'); return; }
-    if (!parsed || typeof parsed !== 'object') { toast('Fișierul nu are structura așteptată', 'error'); return; }
+    const result = tryParseImportJson(reader.result);
+    if (!result.ok) { toast('Fișierul nu e un JSON valid', 'error'); return; }
+    if (!result.data || typeof result.data !== 'object') { toast('Fișierul nu are structura așteptată', 'error'); return; }
     if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele din acest backup? Datele curente se pierd.')) return;
-    const ok = applyImportedData(parsed);
+    const ok = applyImportedData(result.data);
     toast(ok ? 'Backup importat cu succes' : 'Fișierul nu are structura așteptată', ok ? undefined : 'error');
     if (ok) closeSync();
   };
@@ -6310,6 +6344,7 @@ function removePendingScrollStopperImage(){
 function addScrollStopper(){
   const titleInput = document.getElementById('new-scrollstopper-title');
   const descInput = document.getElementById('new-scrollstopper-desc');
+  const linkInput = document.getElementById('new-scrollstopper-link');
   if (!titleInput || !titleInput.value.trim()) { toast('Scrie un titlu pentru tipul de hook', 'error'); return; }
   pushUndo();
   state.scrollStoppers.unshift({
@@ -6317,6 +6352,7 @@ function addScrollStopper(){
     title: titleInput.value.trim(),
     description: descInput ? descInput.value.trim() : '',
     image: pendingScrollStopperImage,
+    exampleLink: linkInput ? linkInput.value.trim() : '',
     addedAt: new Date().toISOString(),
   });
   pendingScrollStopperImage = null;
@@ -6331,10 +6367,12 @@ function saveScrollStopper(id){
   if (!item) return;
   const titleInput = document.getElementById('edit-scrollstopper-title-' + id);
   const descInput = document.getElementById('edit-scrollstopper-desc-' + id);
+  const linkInput = document.getElementById('edit-scrollstopper-link-' + id);
   if (!titleInput || !titleInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
   pushUndo();
   item.title = titleInput.value.trim();
   item.description = descInput ? descInput.value.trim() : item.description;
+  item.exampleLink = linkInput ? linkInput.value.trim() : item.exampleLink;
   saveKey('scrollStoppers', state.scrollStoppers);
   editingScrollStopperId = null;
   renderResources();
@@ -7275,6 +7313,8 @@ function renderResources(){
           '</label>' +
           (s.image ? '<button data-action="delete-scrollstopper-image" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge poza">'+icon('trash','icon-sm')+'</button>' : '') +
         '</div>' +
+        '<label class="field-label">Link exemplu (Instagram)</label>' +
+        '<input id="edit-scrollstopper-link-'+s.id+'" type="text" placeholder="https://instagram.com/p/…" value="'+escapeAttr(s.exampleLink||'')+'" style="margin-bottom:8px;" />' +
         '<div class="flex justify-end gap-2">' +
           '<button data-action="save-scrollstopper" data-id="'+s.id+'" class="btn btn-sm btn-primary">Salvează</button>' +
           '<button data-action="cancel-edit-scrollstopper" class="btn btn-sm">Anulează</button>' +
@@ -7294,6 +7334,7 @@ function renderResources(){
           '</div>' +
         '</div>' +
         (s.description ? '<p class="text-xs muted mt-1" style="line-height:1.5; margin-top:6px;">'+escapeHtml(s.description)+'</p>' : '') +
+        (s.exampleLink ? '<a href="'+escapeAttr(s.exampleLink)+'" target="_blank" rel="noopener noreferrer" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:10px;">'+icon('external','icon-sm')+'Vezi exemplu pe Instagram</a>' : '') +
       '</div>' +
     '</div>';
   };
@@ -7306,6 +7347,8 @@ function renderResources(){
         '<input id="new-scrollstopper-title" type="text" placeholder="Ex: Întrebare controversată" style="margin-bottom:8px;" />' +
         '<label class="field-label">Descriere</label>' +
         '<textarea id="new-scrollstopper-desc" placeholder="Cum funcționează, de ce oprește scroll-ul…" style="min-height:60px; margin-bottom:8px;"></textarea>' +
+        '<label class="field-label">Link exemplu (Instagram, opțional)</label>' +
+        '<input id="new-scrollstopper-link" type="text" placeholder="https://instagram.com/p/…" style="margin-bottom:8px;" />' +
         '<label class="field-label">Imagine de prezentare (opțional)</label>' +
         '<div class="flex items-center gap-2" style="margin-bottom:10px;">' +
           (pendingScrollStopperImage
@@ -7735,7 +7778,9 @@ function syncOverlayHtml(){
             '<button data-action="paste-import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Lipește din clipboard</button>' +
             '<button data-action="import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('refresh','icon-sm')+'Importă din fișier</button>' +
           '</div>' +
-          '<p class="text-xs mute3 mt-2">Ambele înlocuiesc complet datele curente din acest dispozitiv.</p>' +
+          '<p class="text-xs mute3 mt-2">Toate trei înlocuiesc complet datele curente din acest dispozitiv. Telefonul și calculatorul NU au un clipboard comun — după ce apeși „Copiază tot" pe telefon, trebuie mai întâi să lipești acel text undeva ce ajunge și pe calculator (mesaj WhatsApp ție însuți, notă din Drive/iCloud/Keep etc.), apoi să-l copiezi de-acolo pe calculator. Dacă „Lipește din clipboard" zice că nu e JSON valid, cel mai sigur e să copiezi manual textul din acel mesaj/notă și să-l lipești mai jos:</p>' +
+          '<textarea id="manual-import-text" placeholder="…lipește aici direct textul JSON copiat de pe celălalt dispozitiv" style="min-height:70px; margin-top:8px; font-size:12px;"></textarea>' +
+          '<button data-action="import-manual-text" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:8px;">Importă din textul lipit</button>' +
         '</div>' +
         '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
           '<p class="eyebrow" style="margin-bottom:8px;">Auto-sync la un folder (experimental)</p>' +
@@ -8051,6 +8096,7 @@ function onContentClick(e){
   else if (action === 'close-sync-backdrop') { if (e.target === el) closeSync(); }
   else if (action === 'copy-all-data') copyDataToClipboard();
   else if (action === 'paste-import-data') pasteDataFromClipboard();
+  else if (action === 'import-manual-text') importDataFromManualText();
   else if (action === 'qd-convert') qdConvertLead();
   else if (action === 'initiate-renewal') initiateRenewal(el.dataset.id);
   else if (action === 'send-onboarding') sendOnboardingMessage(el.dataset.id);
