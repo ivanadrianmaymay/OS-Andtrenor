@@ -843,6 +843,7 @@ let state = {
   storyArcs: [],
   contentTypes: [],
   scrollStoppers: [],
+  screenTime: { apps: [], totalTargetMinutes: 0, logs: {} },
 };
 let notesState = { items: [], activeId: null }; // kept separate from undo history
 let activeTab = 'dashboard';
@@ -1140,7 +1141,7 @@ function applyRecoveredKey(key, value){
     goal:'goal', calendar:'calendar', leads:'leads', content:'content', resources:'resources',
     activity:'activity', links:'links', trackedAccounts:'trackedAccounts', streak:'streak', ads:'ads', testimonials:'testimonials',
     shotList:'shotList', brand:'brand', gamification:'gamification', storyVault:'storyVault',
-    storyArcs:'storyArcs', contentTypes:'contentTypes', scrollStoppers:'scrollStoppers',
+    storyArcs:'storyArcs', contentTypes:'contentTypes', scrollStoppers:'scrollStoppers', screenTime:'screenTime',
   };
   if (key === 'leads') { state.leads = normalizeLeads(value); return; }
   if (key === 'notes') { notesState = value; return; }
@@ -1258,6 +1259,7 @@ function saveAll(){
   saveKey('storyArcs', state.storyArcs);
   saveKey('contentTypes', state.contentTypes);
   saveKey('scrollStoppers', state.scrollStoppers);
+  saveKey('screenTime', state.screenTime);
 }
 function saveNotes(){ saveKey('notes', notesState); }
 
@@ -1274,6 +1276,7 @@ function snapshotState(){
     links: state.links, trackedAccounts: state.trackedAccounts, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
     brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
     storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
+    screenTime: state.screenTime,
   }));
 }
 function applySnapshot(snap){
@@ -1292,6 +1295,7 @@ function applySnapshot(snap){
   state.storyArcs = (snap.storyArcs && snap.storyArcs.length) ? snap.storyArcs : defaultStoryArcsSeed();
   state.contentTypes = (snap.contentTypes && snap.contentTypes.length) ? snap.contentTypes : defaultContentTypesSeed();
   state.scrollStoppers = snap.scrollStoppers || [];
+  state.screenTime = snap.screenTime || { apps: [], totalTargetMinutes: 0, logs: {} };
 }
 function pushUndo(){
   undoStack.push(snapshotState());
@@ -1367,6 +1371,7 @@ function buildExportPayload(){
       streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
       brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
       storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
+      screenTime: state.screenTime,
     },
   };
 }
@@ -1400,6 +1405,7 @@ function applyImportedData(parsed){
   state.storyArcs = (d.storyArcs && d.storyArcs.length) ? d.storyArcs : state.storyArcs;
   state.contentTypes = (d.contentTypes && d.contentTypes.length) ? d.contentTypes : state.contentTypes;
   state.scrollStoppers = d.scrollStoppers || state.scrollStoppers;
+  state.screenTime = d.screenTime || state.screenTime;
   if (d.notes) notesState = d.notes;
   undoStack = []; redoStack = [];
   closeDataOverlays();
@@ -4555,7 +4561,7 @@ function onNotesInput(text){
 ========================================================= */
 async function resetAllData(){
   if (!confirm('Sigur vrei să ștergi toate datele salvate (tot — obiectiv, checklist, calendar, lead-uri, conținut, resurse, notițe, brand, gamification)? Această acțiune nu poate fi anulată. Poți exporta un backup înainte, din meniu.')) return;
-  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes'), deleteKey('scrollStoppers')]);
+  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes'), deleteKey('scrollStoppers'), deleteKey('screenTime')]);
   QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
   state = {
     goal: { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE },
@@ -4579,6 +4585,7 @@ async function resetAllData(){
     storyArcs: defaultStoryArcsSeed(),
     contentTypes: defaultContentTypesSeed(),
     scrollStoppers: [],
+    screenTime: { apps: [], totalTargetMinutes: 0, logs: {} },
   };
   notesState = seedNotes();
   undoStack = []; redoStack = [];
@@ -5151,6 +5158,60 @@ function renderChecklist(){
     '</div>';
   }).join('');
 
+  const todayTotal = screenTimeTodayTotal();
+  const totalTarget = state.screenTime.totalTargetMinutes || 0;
+  // More is better here — this is productive time (content, PC work,
+  // research), not wasted time — so a target is a minimum to reach, not a
+  // cap: hitting or clearing it is the good outcome (green), and there is
+  // no "over budget" failure state.
+  const totalMeetsGoal = totalTarget > 0 && todayTotal >= totalTarget;
+  const totalPct = totalTarget > 0 ? Math.round((todayTotal / totalTarget) * 100) : null;
+  const screenTimeAppRow = (a) => {
+    const todayLog = state.screenTime.logs[todayISO()];
+    const mins = (todayLog && todayLog.perApp && todayLog.perApp[a.id]) || '';
+    const numMins = Number(mins) || 0;
+    const meetsGoal = a.targetMinutes > 0 && numMins >= a.targetMinutes;
+    // Progress bar shows how close today's minutes are to the (minimum)
+    // target — it's allowed to fill past 100%, the bar itself just caps
+    // visually at full width while the percentage label keeps counting up.
+    const pct = a.targetMinutes > 0 ? Math.round((numMins / a.targetMinutes) * 100) : null;
+    return '<div style="margin-bottom:12px;">' +
+      '<div class="flex gap-2 items-center">' +
+        '<div class="shrink-0" style="width:24px; text-align:center;">'+screenTimeIconHtml(a.icon, 20)+'</div>' +
+        '<div class="flex-1" style="min-width:0;">' +
+          '<p class="text-sm truncate" style="font-weight:600;">'+escapeHtml(a.name)+'</p>' +
+          (a.targetMinutes ? '<p class="text-xs mute3">obiectiv: cel puțin '+a.targetMinutes+' min/zi</p>' : '') +
+        '</div>' +
+        '<input data-field="screentime-app-minutes" data-id="'+a.id+'" type="number" min="0" value="'+mins+'" placeholder="min azi" style="width:90px; '+(meetsGoal?'color:#6ee7b7; border-color:rgba(52,211,153,.4);':'')+'" />' +
+      '</div>' +
+      (pct !== null ? (
+        '<div class="flex items-center gap-2" style="margin-top:6px; margin-left:32px;">' +
+          '<div class="progress-track-sm" style="flex:1;"><div class="progress-fill" style="width:'+Math.min(pct,100)+'%; '+(meetsGoal?'background:#34D399;':'')+'"></div></div>' +
+          '<span class="text-xs tabular" style="min-width:36px; text-align:right; '+(meetsGoal?'color:#6ee7b7; font-weight:700;':'color:var(--text-faint);')+'">'+pct+'%</span>' +
+        '</div>'
+      ) : '') +
+    '</div>';
+  };
+  const screenTimeCard = '<div class="card" style="border-top:3px solid var(--accent-border);">' +
+    '<div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:14px;">' +
+      '<p class="eyebrow" style="margin:0;">⏱️ Productivitate</p>' +
+      '<div class="flex items-center gap-2">' +
+        '<button data-action="open-screentime-stats" class="btn btn-sm">📊 Statistici</button>' +
+        '<button data-action="open-screentime-settings" class="icon-btn" aria-label="Setări productivitate">'+icon('settings','icon-sm')+'</button>' +
+      '</div>' +
+    '</div>' +
+    (state.screenTime.apps.length
+      ? state.screenTime.apps.map(screenTimeAppRow).join('')
+      : '<p class="text-xs mute3 italic" style="margin-bottom:10px;">Nicio activitate urmărită încă — adaugă una din setări ('+icon('settings','icon-sm')+').</p>') +
+    '<div style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">' +
+      '<div class="flex items-center justify-between gap-2 flex-wrap">' +
+        '<p class="text-sm" style="font-weight:700; '+(totalMeetsGoal?'color:#6ee7b7;':'')+'">Total azi: '+todayTotal+' min'+(totalTarget?' / '+totalTarget+' min obiectiv':'')+'</p>' +
+        (totalPct !== null ? '<span class="text-sm tabular" style="font-weight:700; '+(totalMeetsGoal?'color:#6ee7b7;':'color:var(--text-faint);')+'">'+totalPct+'%</span>' : '') +
+      '</div>' +
+      (totalPct !== null ? '<div class="progress-track" style="margin-top:8px;"><div class="progress-fill" style="width:'+Math.min(totalPct,100)+'%; '+(totalMeetsGoal?'background:#34D399;':'')+'"></div></div>' : '') +
+    '</div>' +
+  '</div>';
+
   document.getElementById('content').innerHTML =
   '<div class="animate-fade flex-col gap-5" style="display:flex;">' +
     '<div class="flex items-center justify-between flex-wrap gap-3">' +
@@ -5161,6 +5222,7 @@ function renderChecklist(){
       '<button data-action="reset-day" class="btn">'+icon('refresh','icon-sm')+'Reset Zilnic</button>' +
     '</div>' +
     '<div class="progress-track"><div class="progress-fill" style="width:'+cs.pct+'%"></div></div>' +
+    screenTimeCard +
     '<div class="grid grid-1-3">' + catHtml + '</div>' +
   '</div>';
 }
@@ -6408,6 +6470,182 @@ function deleteScrollStopperImage(id){
   saveKey('scrollStoppers', state.scrollStoppers);
   renderResources();
 }
+
+/* =========================================================
+   MUTATIONS — Productivitate (Execuție Zilnică)
+   Manual, self-reported log per activity per day (no OS-level access is
+   possible from a web page to read real usage — phone or PC). Deliberately
+   framed as time to maximize, not a cap: exceeding a target is the good
+   outcome here, never a "budget" to stay under.
+   state.screenTime = { apps, totalTargetMinutes, logs } where logs is keyed
+   by ISO date -> { perApp: { appId: minutes } }. (Internal names kept as
+   "screenTime"/"apps" from the original build — user-facing text says
+   "Productivitate"/"activitate" throughout.)
+========================================================= */
+let editingScreenTimeAppId = null;
+let screenTimeStatsOpen = false;
+let screenTimeSettingsOpen = false;
+let screenTimeStatsMode = 'week'; // 'week' | 'month'
+let pendingScreenTimeAppIcon = null; // photo uploaded for the add-new-activity form
+let editingScreenTimeAppIcon = null; // photo uploaded while editing an existing activity
+function screenTimeIconHtml(iconValue, size){
+  const s = size || 20;
+  if (iconValue && iconValue.indexOf('data:') === 0) return '<img src="'+escapeAttr(iconValue)+'" alt="" style="width:'+s+'px; height:'+s+'px; object-fit:cover; border-radius:6px; vertical-align:middle;" />';
+  return '<span style="display:inline-flex; align-items:center; justify-content:center; width:'+s+'px; height:'+s+'px; border-radius:6px; background:rgba(255,255,255,.06); color:var(--text-faint); vertical-align:middle;">'+icon('image','icon-sm')+'</span>';
+}
+function handleScreenTimeAppIconUpload(input, mode){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
+  if (file.size > 5*1024*1024) { toast('Poza e prea mare (max 5MB)', 'error'); return; }
+  resizeImageFileToDataUrl(file, 64, 0.85).then(dataUrl => {
+    if (mode === 'edit') editingScreenTimeAppIcon = dataUrl; else pendingScreenTimeAppIcon = dataUrl;
+    renderOverlay();
+  }).catch(() => toast('Nu am putut încărca poza', 'error'));
+}
+function removeScreenTimeAppIcon(mode){
+  if (mode === 'edit') editingScreenTimeAppIcon = null; else pendingScreenTimeAppIcon = null;
+  renderOverlay();
+}
+function openScreenTimeSettings(){
+  screenTimeSettingsOpen = true;
+  screenTimeStatsOpen = false;
+  pendingScreenTimeAppIcon = null;
+  editingScreenTimeAppId = null;
+  editingScreenTimeAppIcon = null;
+  renderOverlay();
+}
+function closeScreenTimeSettings(){
+  screenTimeSettingsOpen = false;
+  editingScreenTimeAppId = null;
+  editingScreenTimeAppIcon = null;
+  pendingScreenTimeAppIcon = null;
+  renderOverlay();
+  renderChecklist();
+}
+function addScreenTimeApp(){
+  const nameInput = document.getElementById('new-screentime-app-name');
+  const targetInput = document.getElementById('new-screentime-app-target');
+  if (!nameInput || !nameInput.value.trim()) { toast('Scrie numele activității', 'error'); return; }
+  pushUndo();
+  const name = nameInput.value.trim();
+  state.screenTime.apps.push({
+    id: uid(),
+    name: name,
+    targetMinutes: targetInput && targetInput.value ? Math.max(0, parseInt(targetInput.value, 10) || 0) : 0,
+    icon: pendingScreenTimeAppIcon || null,
+  });
+  pendingScreenTimeAppIcon = null;
+  saveKey('screenTime', state.screenTime);
+  renderOverlay();
+  toast('Activitate adăugată');
+}
+function startEditScreenTimeApp(id){
+  editingScreenTimeAppId = id;
+  const app = state.screenTime.apps.find(a => a.id === id);
+  editingScreenTimeAppIcon = app ? (app.icon || null) : null;
+  renderOverlay();
+}
+function cancelEditScreenTimeApp(){ editingScreenTimeAppId = null; editingScreenTimeAppIcon = null; renderOverlay(); }
+function saveScreenTimeApp(id){
+  const app = state.screenTime.apps.find(a => a.id === id);
+  if (!app) return;
+  const nameInput = document.getElementById('edit-screentime-app-name-' + id);
+  const targetInput = document.getElementById('edit-screentime-app-target-' + id);
+  if (!nameInput || !nameInput.value.trim()) { toast('Numele nu poate fi gol', 'error'); return; }
+  pushUndo();
+  app.name = nameInput.value.trim();
+  app.targetMinutes = targetInput && targetInput.value ? Math.max(0, parseInt(targetInput.value, 10) || 0) : 0;
+  app.icon = editingScreenTimeAppIcon;
+  saveKey('screenTime', state.screenTime);
+  editingScreenTimeAppId = null;
+  editingScreenTimeAppIcon = null;
+  renderOverlay();
+  toast('Salvat');
+}
+function deleteScreenTimeApp(id){
+  if (!confirm('Ștergi această activitate din monitorizare? Istoricul deja înregistrat pentru ea rămâne în statistici.')) return;
+  pushUndo();
+  state.screenTime.apps = state.screenTime.apps.filter(a => a.id !== id);
+  if (editingScreenTimeAppId === id) editingScreenTimeAppId = null;
+  saveKey('screenTime', state.screenTime);
+  renderOverlay();
+  toast('Șters');
+}
+function ensureScreenTimeLog(iso){
+  if (!state.screenTime.logs[iso] || !state.screenTime.logs[iso].perApp) state.screenTime.logs[iso] = { perApp: {} };
+  return state.screenTime.logs[iso];
+}
+function setScreenTimeMinutes(appId, value){
+  const iso = todayISO();
+  const minutes = Math.max(0, parseInt(value, 10) || 0);
+  const log = ensureScreenTimeLog(iso);
+  if (minutes) log.perApp[appId] = minutes; else delete log.perApp[appId];
+  if (!Object.keys(log.perApp).length) delete state.screenTime.logs[iso];
+  saveKey('screenTime', state.screenTime);
+  // Deferred one tick: this fires on 'change' (blur), and this card can have
+  // several of these minute inputs sitting right next to each other — if the
+  // person Tabs from one straight into the next, a synchronous re-render here
+  // tears down the very element the browser is mid-way through focusing,
+  // which throws "node to be removed is no longer a child of this node".
+  // Letting the blur/focus transition finish first avoids that race.
+  setTimeout(renderChecklist, 0);
+}
+function updateScreenTimeTotalTarget(value){
+  state.screenTime.totalTargetMinutes = Math.max(0, parseInt(value, 10) || 0);
+  saveKey('screenTime', state.screenTime);
+  setTimeout(renderOverlay, 0);
+}
+function screenTimeTodayTotal(){
+  const log = state.screenTime.logs[todayISO()];
+  if (!log || !log.perApp) return 0;
+  return Object.values(log.perApp).reduce((a, b) => a + b, 0);
+}
+function openScreenTimeStats(){ screenTimeStatsOpen = true; screenTimeSettingsOpen = false; renderOverlay(); }
+function closeScreenTimeStats(){ screenTimeStatsOpen = false; renderOverlay(); }
+function setScreenTimeStatsMode(mode){ screenTimeStatsMode = mode; renderOverlay(); }
+// Groups the raw daily logs into the last N weeks or months (most recent
+// first). A day with no log at all counts as 0 minutes — there's no way to
+// tell "forgot to log" from "didn't use it" with self-reported data, so we
+// treat missing the same as zero, same as most screen-time-limit tools do.
+function screenTimePeriodStats(mode){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const count = mode === 'week' ? 10 : 6;
+  const periods = [];
+  for (let i = 0; i < count; i++) {
+    let start, end, label;
+    if (mode === 'week') {
+      const dow = (today.getDay() + 6) % 7;
+      const thisWeekStart = new Date(today); thisWeekStart.setDate(today.getDate() - dow);
+      start = new Date(thisWeekStart); start.setDate(thisWeekStart.getDate() - 7 * i);
+      end = new Date(start); end.setDate(start.getDate() + 6);
+      label = formatShortDate(start) + ' – ' + formatShortDate(end);
+    } else {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      start = new Date(d.getFullYear(), d.getMonth(), 1);
+      end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      label = RO_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    const cappedEnd = end < today ? end : today;
+    const daysInPeriod = Math.max(1, Math.round((cappedEnd - start) / 86400000) + 1);
+    const perApp = {};
+    let total = 0;
+    for (let dd = new Date(start); dd <= cappedEnd; dd.setDate(dd.getDate() + 1)) {
+      const iso = dateToISO(dd);
+      const log = state.screenTime.logs[iso];
+      if (log && log.perApp) {
+        Object.keys(log.perApp).forEach(appId => {
+          perApp[appId] = (perApp[appId] || 0) + log.perApp[appId];
+          total += log.perApp[appId];
+        });
+      }
+    }
+    periods.push({ label, total, perApp, daysInPeriod });
+  }
+  return periods;
+}
+
 function handleAccountPhotoSelect(id, input){
   const file = input.files && input.files[0];
   input.value = '';
@@ -7459,6 +7697,8 @@ function renderOverlay(){
   else if (postDetailFor) { root.innerHTML = postDetailOverlayHtml(postDetailFor); }
   else if (snippetOpenFor) { root.innerHTML = snippetOverlayHtml(); }
   else if (syncOpen) { root.innerHTML = syncOverlayHtml(); }
+  else if (screenTimeStatsOpen) { root.innerHTML = screenTimeStatsOverlayHtml(); }
+  else if (screenTimeSettingsOpen) { root.innerHTML = screenTimeSettingsOverlayHtml(); }
   else { root.innerHTML = ''; lastOverlayScrollTop = 0; return; }
   const newBody = root.querySelector('.overlay-body');
   if (newBody && prevScroll) newBody.scrollTop = prevScroll;
@@ -7819,6 +8059,122 @@ function syncOverlayHtml(){
   '</div>';
 }
 
+function screenTimeStatsOverlayHtml(){
+  const apps = state.screenTime.apps;
+  const periods = screenTimePeriodStats(screenTimeStatsMode);
+  const totalTarget = state.screenTime.totalTargetMinutes || 0;
+  const modeSwitch = '<div class="flex gap-2" style="margin-bottom:14px;">' +
+    '<button data-action="set-screentime-stats-mode" data-mode="week" class="btn btn-sm'+(screenTimeStatsMode==='week'?' btn-active':'')+'">Pe săptămâni</button>' +
+    '<button data-action="set-screentime-stats-mode" data-mode="month" class="btn btn-sm'+(screenTimeStatsMode==='month'?' btn-active':'')+'">Pe luni</button>' +
+  '</div>';
+  const rows = periods.map(p => {
+    const appCells = apps.map(a => {
+      const mins = p.perApp[a.id] || 0;
+      const avgPerDay = mins / p.daysInPeriod;
+      const meetsGoal = a.targetMinutes ? avgPerDay >= a.targetMinutes : false;
+      return '<td class="tabular text-xs" style="'+(a.targetMinutes ? (meetsGoal ? 'color:#6ee7b7;' : '') : '')+'">'+Math.round(mins)+'</td>';
+    }).join('');
+    const totalMeetsGoal = totalTarget ? (p.total / p.daysInPeriod) >= totalTarget : false;
+    return '<tr>' +
+      '<td class="text-xs muted" style="white-space:nowrap; padding-right:10px;">'+escapeHtml(p.label)+'</td>' +
+      appCells +
+      '<td class="tabular text-xs" style="font-weight:700; '+(totalTarget ? (totalMeetsGoal ? 'color:#6ee7b7;' : '') : '')+'">'+Math.round(p.total)+'</td>' +
+      '<td class="tabular text-xs mute3">'+Math.round(p.total / p.daysInPeriod)+'</td>' +
+    '</tr>';
+  }).join('');
+  const table = apps.length
+    ? '<div style="overflow-x:auto;">' +
+        '<table style="width:100%; border-collapse:collapse;">' +
+          '<thead><tr>' +
+            '<th class="text-xs mute3" style="text-align:left; padding-right:10px;">Perioadă</th>' +
+            apps.map(a => '<th class="text-xs mute3" style="text-align:left; white-space:nowrap;" title="Obiectiv: cel puțin '+(a.targetMinutes||0)+' min/zi">'+screenTimeIconHtml(a.icon,14)+' '+escapeHtml(a.name)+'</th>').join('') +
+            '<th class="text-xs mute3" style="text-align:left;">Total</th>' +
+            '<th class="text-xs mute3" style="text-align:left;">Medie/zi</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '<p class="text-xs mute3 mt-2" style="margin-top:10px;">Minute, însumate pe perioadă. O zi fără nicio valoare introdusă contează ca 0 minute — nu ca „necunoscut". '+(apps.some(a=>a.targetMinutes) || totalTarget ? 'Verde = ai atins sau depășit obiectivul zilnic (medie pe perioadă) — mai mult e mereu bine aici.' : '')+'</p>'
+    : '<p class="text-xs mute3 italic">Adaugă cel puțin o activitate urmărită (din setări) ca să vezi statistici aici.</p>';
+  return '<div class="overlay-backdrop" data-action="close-screentime-stats-backdrop">' +
+    '<div class="overlay-panel">' +
+      '<div class="overlay-head">' +
+        '<p class="h2">⏱️ Statistici Productivitate</p>' +
+        '<button data-action="close-screentime-stats" class="icon-btn">'+icon('x','icon')+'</button>' +
+      '</div>' +
+      '<div class="overlay-body flex-col gap-3" style="display:flex;">' +
+        modeSwitch +
+        table +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function screenTimeSettingsOverlayHtml(){
+  const totalTarget = state.screenTime.totalTargetMinutes || 0;
+  const photoPicker = (mode, currentIcon) => '<div class="flex items-center gap-2" style="margin-bottom:8px;">' +
+    screenTimeIconHtml(currentIcon, 28) +
+    '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+'Încarcă poză' +
+      '<input type="file" accept="image/*" data-action-file="'+(mode==='edit'?'edit-screentime-app-icon':'new-screentime-app-icon')+'" style="display:none;" />' +
+    '</label>' +
+    (currentIcon ? '<button type="button" data-action="remove-screentime-icon" data-mode="'+mode+'" class="icon-btn" title="Șterge poza">'+icon('x','icon-sm')+'</button>' : '') +
+  '</div>';
+  const appRow = (a) => {
+    const isEditing = editingScreenTimeAppId === a.id;
+    if (isEditing) {
+      const previewIcon = editingScreenTimeAppIcon;
+      return '<div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,.15); border-radius:10px;">' +
+        photoPicker('edit', previewIcon) +
+        '<div class="flex gap-2 items-center">' +
+          '<input id="edit-screentime-app-name-'+a.id+'" type="text" value="'+escapeAttr(a.name)+'" class="flex-1" placeholder="Nume activitate" />' +
+          '<input id="edit-screentime-app-target-'+a.id+'" type="number" min="0" value="'+(a.targetMinutes||0)+'" style="width:80px;" placeholder="min/zi" />' +
+          '<button data-action="save-screentime-app" data-id="'+a.id+'" class="icon-btn ok">'+icon('check','icon-sm')+'</button>' +
+          '<button data-action="cancel-edit-screentime-app" class="icon-btn">'+icon('x','icon-sm')+'</button>' +
+        '</div>' +
+      '</div>';
+    }
+    return '<div class="flex gap-2 items-center" style="margin-bottom:8px;">' +
+      '<div class="shrink-0" style="width:28px; text-align:center;">'+screenTimeIconHtml(a.icon, 24)+'</div>' +
+      '<div class="flex-1" style="min-width:0;">' +
+        '<p class="text-sm truncate" style="font-weight:600;">'+escapeHtml(a.name)+'</p>' +
+        (a.targetMinutes ? '<p class="text-xs mute3">obiectiv: cel puțin '+a.targetMinutes+' min/zi</p>' : '<p class="text-xs mute3">fără obiectiv setat</p>') +
+      '</div>' +
+      '<button data-action="edit-screentime-app" data-id="'+a.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
+      '<button data-action="delete-screentime-app" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
+    '</div>';
+  };
+  return '<div class="overlay-backdrop" data-action="close-screentime-settings-backdrop">' +
+    '<div class="overlay-panel">' +
+      '<div class="overlay-head">' +
+        '<p class="h2">⚙️ Setări Productivitate</p>' +
+        '<button data-action="close-screentime-settings" class="icon-btn">'+icon('x','icon')+'</button>' +
+      '</div>' +
+      '<div class="overlay-body flex-col gap-4" style="display:flex;">' +
+        '<p class="text-xs mute3">Timp de productivitate — conținut, cercetare, inspirație, lucru la PC — nu timp pierdut: cu cât mai mult, cu atât mai bine. Obiectivele sunt un minim de atins, nu un plafon. Nu putem citi automat timpul petrecut pe telefon sau PC (fără acces la statisticile sistemului), așa că introdu manual minutele din Execuție Zilnică.</p>' +
+        '<div>' +
+          '<p class="eyebrow" style="margin-bottom:8px;">Activități urmărite</p>' +
+          (state.screenTime.apps.length
+            ? state.screenTime.apps.map(appRow).join('')
+            : '<p class="text-xs mute3 italic" style="margin-bottom:10px;">Nicio activitate urmărită încă — adaugă una mai jos.</p>') +
+        '</div>' +
+        '<div style="padding-top:10px; border-top:1px solid var(--line);">' +
+          '<p class="eyebrow" style="margin-bottom:8px;">Activitate nouă</p>' +
+          photoPicker('new', pendingScreenTimeAppIcon) +
+          '<div class="flex gap-2 items-center">' +
+            '<input id="new-screentime-app-name" type="text" placeholder="Activitate nouă (ex: Instagram, Canva, PC)" class="flex-1" />' +
+            '<input id="new-screentime-app-target" type="number" min="0" placeholder="obiectiv min/zi" style="width:120px;" />' +
+            '<button data-action="add-screentime-app" class="btn btn-icon shrink-0">'+icon('plus','icon-sm')+'</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="flex items-center justify-between gap-2 flex-wrap" style="padding-top:10px; border-top:1px solid var(--line);">' +
+          '<label class="text-sm" style="font-weight:600;">Obiectiv total zilnic (min)</label>' +
+          '<input data-field="screentime-total-target" type="number" min="0" value="'+(totalTarget||'')+'" style="width:90px;" />' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
 function notesOverlayHtml(){
   const active = notesState.items.find(n => n.id === notesState.activeId) || notesState.items[0];
   const tabs = notesState.items.map(n =>
@@ -8002,6 +8358,17 @@ function onContentClick(e){
   else if (action === 'save-scrollstopper') saveScrollStopper(el.dataset.id);
   else if (action === 'delete-scrollstopper') deleteScrollStopper(el.dataset.id);
   else if (action === 'delete-scrollstopper-image') deleteScrollStopperImage(el.dataset.id);
+  else if (action === 'add-screentime-app') addScreenTimeApp();
+  else if (action === 'edit-screentime-app') startEditScreenTimeApp(el.dataset.id);
+  else if (action === 'cancel-edit-screentime-app') cancelEditScreenTimeApp();
+  else if (action === 'save-screentime-app') saveScreenTimeApp(el.dataset.id);
+  else if (action === 'delete-screentime-app') deleteScreenTimeApp(el.dataset.id);
+  else if (action === 'open-screentime-stats') openScreenTimeStats();
+  else if (action === 'close-screentime-stats') closeScreenTimeStats();
+  else if (action === 'set-screentime-stats-mode') setScreenTimeStatsMode(el.dataset.mode);
+  else if (action === 'open-screentime-settings') openScreenTimeSettings();
+  else if (action === 'close-screentime-settings') closeScreenTimeSettings();
+  else if (action === 'remove-screentime-icon') removeScreenTimeAppIcon(el.dataset.mode);
   else if (action === 'open-add-group') { newGroupInputOpen = true; renderResources(); }
   else if (action === 'cancel-add-group') { newGroupInputOpen = false; renderResources(); }
   else if (action === 'confirm-add-group') addGroup();
@@ -8094,6 +8461,8 @@ function onContentClick(e){
   else if (action === 'check-google-drive-now') driveRead(false);
   else if (action === 'close-sync') closeSync();
   else if (action === 'close-sync-backdrop') { if (e.target === el) closeSync(); }
+  else if (action === 'close-screentime-stats-backdrop') { if (e.target === el) closeScreenTimeStats(); }
+  else if (action === 'close-screentime-settings-backdrop') { if (e.target === el) closeScreenTimeSettings(); }
   else if (action === 'copy-all-data') copyDataToClipboard();
   else if (action === 'paste-import-data') pasteDataFromClipboard();
   else if (action === 'import-manual-text') importDataFromManualText();
@@ -8189,6 +8558,8 @@ function onContentChange(e){
     else if (field === 'lead-igLink') updateLeadField(el.dataset.id, 'igLink', el.value);
     else if (field.indexOf('qualify-') === 0) setQualifyField(el.dataset.id, field.replace('qualify-',''), el.value);
     else if (field === 'ads-budget') updateAdsBudget(el.value);
+    else if (field === 'screentime-app-minutes') setScreenTimeMinutes(el.dataset.id, el.value);
+    else if (field === 'screentime-total-target') updateScreenTimeTotalTarget(el.value);
     return;
   }
   const dayTypeEl = e.target.closest('[data-daytype]');
@@ -8206,6 +8577,8 @@ function onContentChange(e){
     else if (kind === 'account-photo') handleAccountPhotoSelect(fileEl.dataset.id, fileEl);
     else if (kind === 'new-scrollstopper-image') handleScrollStopperImageSelect(fileEl);
     else if (kind === 'existing-scrollstopper-image') handleScrollStopperImageReplace(fileEl.dataset.id, fileEl);
+    else if (kind === 'new-screentime-app-icon') handleScreenTimeAppIconUpload(fileEl, 'new');
+    else if (kind === 'edit-screentime-app-icon') handleScreenTimeAppIconUpload(fileEl, 'edit');
     return;
   }
   if (e.target && e.target.id === 'import-file-input' && e.target.files && e.target.files[0]) {
@@ -8409,7 +8782,7 @@ function onScrollForFab(){
 }
 
 async function init(){
-  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes, scrollStoppers] = await Promise.all([
+  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes, scrollStoppers, screenTime] = await Promise.all([
     loadKey('goal', null),
     loadKey('checklist', null),
     loadKey('calendar', { posts: [] }),
@@ -8435,6 +8808,7 @@ async function init(){
     loadKey('storyArcs', null),
     loadKey('contentTypes', null),
     loadKey('scrollStoppers', []),
+    loadKey('screenTime', null),
   ]);
 
   state.goal = goal || { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE };
@@ -8486,6 +8860,10 @@ async function init(){
   state.storyArcs = (storyArcs && storyArcs.length) ? storyArcs : defaultStoryArcsSeed();
   state.contentTypes = (contentTypes && contentTypes.length) ? contentTypes : defaultContentTypesSeed();
   state.scrollStoppers = scrollStoppers || [];
+  state.screenTime = screenTime || { apps: [], totalTargetMinutes: 0, logs: {} };
+  if (state.screenTime.apps === undefined) state.screenTime.apps = [];
+  if (state.screenTime.totalTargetMinutes === undefined) state.screenTime.totalTargetMinutes = 0;
+  if (state.screenTime.logs === undefined) state.screenTime.logs = {};
   // Backfill: older story items were created before "date" existed — assign
   // them their creation date so they still show up in the right day column
   // instead of vanishing from the new per-day Story view.
