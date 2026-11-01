@@ -950,9 +950,30 @@ function copyToClipboard(text){
 function fallbackCopy(text, done, fail){
   try {
     const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.focus(); ta.select();
+    ta.value = text;
+    ta.readOnly = true;
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    ta.style.fontSize = '16px'; // stops iOS auto-zooming the page on focus
+    document.body.appendChild(ta);
+    ta.focus();
+    // Plain .select()/.setSelectionRange() is unreliable on mobile Safari —
+    // it can silently select nothing (or leave whatever was already
+    // selected on the page untouched), so execCommand('copy') then "works"
+    // (returns true) while actually copying the wrong thing or nothing at
+    // all. Building an explicit DOM Range + Selection is the standard
+    // cross-device fix that makes the browser actually select this
+    // textarea's content before copying.
+    const range = document.createRange();
+    range.selectNodeContents(ta);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    ta.setSelectionRange(0, text.length);
     const ok = document.execCommand('copy');
+    selection.removeAllRanges();
     document.body.removeChild(ta);
     ok ? done() : fail();
   } catch(e){ fail(); }
