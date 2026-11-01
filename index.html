@@ -288,7 +288,6 @@
   .filming-mode{position:fixed; inset:0; z-index:100; background:var(--bg); padding:18px; padding-bottom:calc(18px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column;}
   .film-shot-card{display:flex; align-items:flex-start; gap:14px; width:100%; text-align:left; padding:16px;}
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -459,7 +458,6 @@ const ICONS = {
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   flame: '<path d="M12 2c1 3-2 4-2 7a3 3 0 0 0 6 0c0-1-.5-2-.5-2 1.5 1 2.5 3 2.5 5a6 6 0 0 1-12 0c0-4 3-5 3-8 0-1-.3-2-.3-2S11 1 12 2z" fill="currentColor" stroke="none"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2"/>',
-  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="m21 15-5-5L5 21"/>',
 };
 
 function icon(name, size){
@@ -498,7 +496,7 @@ const STORY_ARCS = [
   { name: 'Autoritate',                         desc: 'O lecție tehnică scurtă care arată că știi despre ce vorbești' },
   { name: 'Dovadă Socială / Victorie Client',   desc: 'Un rezultat, un feedback sau un before/after real' },
   { name: 'Demontare Mituri',                   desc: 'Sparge un mit comun din fitness/nutriție' },
-  { name: 'Ofertă Directă High-Ticket',         desc: 'Vorbește direct despre MASTERY — fără ocolișuri' },
+  { name: 'Oferta Directă High-Ticket',         desc: 'Vorbește direct despre MASTERY — fără ocolișuri' },
   { name: 'Lifestyle',                          desc: 'Partea umană — o zi din viața ta, ceva relatable' },
   { name: 'Audit & Q&A',                        desc: 'Recapitulează săptămâna, răspunde la întrebări din DM' },
 ];
@@ -552,30 +550,10 @@ const STORY_DRAFTS = [
     trigger: ['Ce întrebare ai pentru mine? Scrie-mi în DM chiar acum.'],
   },
 ];
-function pickDraft(arr){ return arr && arr.length ? arr[Math.floor(Math.random()*arr.length)] : ''; }
-// state.storyArcs holds the user's editable copy of the narrative arcs — name,
-// description, and per-step draft phrase pools (one variant per line, picked
-// randomly on generate/regenerate). Seeded once from STORY_ARCS + STORY_DRAFTS
-// above; those consts are only ever used as seed data from here on, so the
-// person can rename, restyle, delete, or add arcs freely without touching code.
-// "trigger" has no pool here on purpose — it's always your Brand CTA (see
-// buildStoryItem) so regenerating it just means "reset to my current CTA".
-function defaultStoryArcsSeed(){
-  return STORY_ARCS.map((a, idx) => ({
-    id: uid(),
-    name: a.name,
-    desc: a.desc,
-    drafts: {
-      hook: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].hook || []).slice(),
-      context: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].context || []).slice(),
-      tensiune: (STORY_DRAFTS[idx] && STORY_DRAFTS[idx].tensiune || []).slice(),
-    },
-  }));
-}
+function pickDraft(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function todayArcIndex(){
   const d = new Date();
-  const n = state.storyArcs.length || 1;
-  return (d.getDay() + 6) % n; // Monday = 0, cycles through however many arcs currently exist
+  return (d.getDay() + 6) % 7; // Monday = 0, matches STORY_ARCS order
 }
 function sanitizeForInstagram(text){
   return String(text||'')
@@ -840,10 +818,6 @@ let state = {
   brand: { name: '', subtitle: '', keyword: '', ctaText: '', baseLink: '', dmConversions: 0, savedCTAs: [] },
   gamification: { xp: 0, milestonesShown: [] },
   storyVault: { items: [], weeklyFlags: {} },
-  storyArcs: [],
-  contentTypes: [],
-  scrollStoppers: [],
-  screenTime: { apps: [], totalTargetMinutes: 0, logs: {} },
 };
 let notesState = { items: [], activeId: null }; // kept separate from undo history
 let activeTab = 'dashboard';
@@ -1141,7 +1115,6 @@ function applyRecoveredKey(key, value){
     goal:'goal', calendar:'calendar', leads:'leads', content:'content', resources:'resources',
     activity:'activity', links:'links', trackedAccounts:'trackedAccounts', streak:'streak', ads:'ads', testimonials:'testimonials',
     shotList:'shotList', brand:'brand', gamification:'gamification', storyVault:'storyVault',
-    storyArcs:'storyArcs', contentTypes:'contentTypes', scrollStoppers:'scrollStoppers', screenTime:'screenTime',
   };
   if (key === 'leads') { state.leads = normalizeLeads(value); return; }
   if (key === 'notes') { notesState = value; return; }
@@ -1159,17 +1132,16 @@ async function attemptSave(key, payload){
 async function saveKey(key, value){
   // 'meta' is local-only sync bookkeeping (tokens, last-applied timestamps,
   // last-backup time) — it's never part of buildExportPayload(), so pushing
-  // it to Drive/the sync file is a no-op write with no real content change.
+  // it to the sync file is a no-op write with no real content change.
   // Scheduling one anyway created a self-sustaining loop: every successful
   // write calls saveMeta() to record its own timestamp, which used to
-  // schedule ANOTHER write, forever, every ~1.5s — so once Drive/file sync
-  // was connected, this device stayed in a permanent write loop completely
+  // schedule ANOTHER write, forever, every ~1.5s — so once file sync was
+  // connected, this device stayed in a permanent write loop completely
   // unrelated to any real local edit, making it constantly re-push (and, if
   // it raced with another device's newer save, constantly at risk of
   // overwriting it — the root of "always copies from the computer").
   if (key !== 'meta') {
     scheduleSyncFileWrite();
-    scheduleGoogleDriveWrite();
   }
   const stamped = { t: Date.now(), v: value };
 
@@ -1256,10 +1228,6 @@ function saveAll(){
   saveKey('brand', state.brand);
   saveKey('gamification', state.gamification);
   saveKey('storyVault', state.storyVault);
-  saveKey('storyArcs', state.storyArcs);
-  saveKey('contentTypes', state.contentTypes);
-  saveKey('scrollStoppers', state.scrollStoppers);
-  saveKey('screenTime', state.screenTime);
 }
 function saveNotes(){ saveKey('notes', notesState); }
 
@@ -1275,8 +1243,6 @@ function snapshotState(){
     leads: state.leads, content: state.content, resources: state.resources, activity: state.activity,
     links: state.links, trackedAccounts: state.trackedAccounts, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
     brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
-    storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
-    screenTime: state.screenTime,
   }));
 }
 function applySnapshot(snap){
@@ -1292,10 +1258,6 @@ function applySnapshot(snap){
   if (state.brand.savedCTAs === undefined) state.brand.savedCTAs = [];
   state.gamification = snap.gamification || { xp: 0, milestonesShown: [] };
   state.storyVault = snap.storyVault || { items: [], weeklyFlags: {} };
-  state.storyArcs = (snap.storyArcs && snap.storyArcs.length) ? snap.storyArcs : defaultStoryArcsSeed();
-  state.contentTypes = (snap.contentTypes && snap.contentTypes.length) ? snap.contentTypes : defaultContentTypesSeed();
-  state.scrollStoppers = snap.scrollStoppers || [];
-  state.screenTime = snap.screenTime || { apps: [], totalTargetMinutes: 0, logs: {} };
 }
 function pushUndo(){
   undoStack.push(snapshotState());
@@ -1370,8 +1332,6 @@ function buildExportPayload(){
       navOrder: state.navOrder, qualifyConfig: QUALIFY_FIELDS, settings: state.settings,
       streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
       brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
-      storyArcs: state.storyArcs, contentTypes: state.contentTypes, scrollStoppers: state.scrollStoppers,
-      screenTime: state.screenTime,
     },
   };
 }
@@ -1402,10 +1362,6 @@ function applyImportedData(parsed){
   state.brand = d.brand || state.brand;
   state.gamification = d.gamification || state.gamification;
   state.storyVault = d.storyVault || state.storyVault;
-  state.storyArcs = (d.storyArcs && d.storyArcs.length) ? d.storyArcs : state.storyArcs;
-  state.contentTypes = (d.contentTypes && d.contentTypes.length) ? d.contentTypes : state.contentTypes;
-  state.scrollStoppers = d.scrollStoppers || state.scrollStoppers;
-  state.screenTime = d.screenTime || state.screenTime;
   if (d.notes) notesState = d.notes;
   undoStack = []; redoStack = [];
   closeDataOverlays();
@@ -1435,66 +1391,85 @@ function exportData(){
 }
 function copyDataToClipboard(){
   const payload = buildExportPayload();
-  copyToClipboard(JSON.stringify(payload));
+  const text = JSON.stringify(payload);
+  copyToClipboardOrShow(text);
   markBackedUp();
 }
-// Text relayed between devices through a messaging app or notes app (which is
-// the whole point of the copy/paste flow, since a phone's OS clipboard isn't
-// shared with a computer's) very often comes back mangled: autocorrect turns
-// straight quotes into curly "smart" quotes, a BOM or zero-width character
-// sneaks in, or the app adds its own text around the JSON (a caption, a
-// forwarded-message header). None of that means the data itself is gone —
-// so we normalize it and, if that's still not valid JSON, try pulling out
-// just the outermost {...} block before giving up.
+// Some hosting contexts (e.g. this app running embedded as a preview, inside
+// an iframe) don't grant clipboard-write permission, so navigator.clipboard
+// and even the legacy execCommand('copy') fallback can both silently fail.
+// When that happens, fall back to showing the raw text in a selectable box
+// right in the Sync overlay so the person can select-all + copy by hand —
+// that's a plain text-selection action, never gated behind clipboard
+// permissions the way the programmatic APIs are.
+let manualCopyText = null;
+function copyToClipboardOrShow(text){
+  const done = () => { manualCopyText = null; toast('Copiat în clipboard'); if (syncOpen) renderOverlay(); };
+  const fail = () => { manualCopyText = text; toast('Nu am putut copia automat — textul e mai jos, selectează tot și copiază manual', 'error'); if (syncOpen) renderOverlay(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done, fail));
+  } else { fallbackCopy(text, done, fail); }
+}
+function selectManualCopyText(){
+  const ta = document.getElementById('manual-copy-text');
+  if (ta) { ta.focus(); ta.select(); }
+}
+// Phone↔computer relays (a WhatsApp message to self, a Drive/iCloud/Keep
+// note) commonly mangle the copied JSON on the way through — autocorrect
+// turns straight quotes into curly "smart" quotes, a BOM or zero-width
+// character gets prepended, or the messaging app glues its own caption text
+// around it — which breaks JSON.parse even though the real data is intact.
+// These two helpers defensively clean that up before giving up.
 function sanitizeImportText(text){
-  if (!text) return text;
-  let t = text;
-  t = t.replace(/[﻿​‌‍]/g, '');
-  t = t.replace(/[‘’‚‛]/g, "'").replace(/[“”„‟]/g, '"');
-  t = t.replace(/ /g, ' ');
-  return t.trim();
+  return String(text || '')
+    .replace(/^﻿/, '')
+    .replace(/[​‌‍]/g, '')
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
+    .replace(/ /g, ' ')
+    .trim();
 }
 function tryParseImportJson(rawText){
   const cleaned = sanitizeImportText(rawText);
-  try { return { ok: true, data: JSON.parse(cleaned) }; } catch(e){}
+  try { return JSON.parse(cleaned); } catch(e){ /* fall through */ }
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return { ok: true, data: JSON.parse(cleaned.slice(start, end + 1)) }; } catch(e){}
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch(e){ /* give up below */ }
   }
-  return { ok: false };
+  return null;
 }
 async function pasteDataFromClipboard(){
   try {
-    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea din clipboard aici — folosește lipirea manuală de mai jos sau Import din fișier.', 'error'); return; }
+    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea automată din clipboard aici — folosește "Lipește din text" mai jos.', 'error'); return; }
     const text = await navigator.clipboard.readText();
-    const result = tryParseImportJson(text);
-    if (!result.ok) { toast('Ce e în clipboard nu e un JSON valid — s-ar putea să nu fie chiar ce ai copiat pe telefon (clipboard-ul nu e comun între telefon și calculator). Încearcă lipirea manuală de mai jos.', 'error'); return; }
+    const parsed = tryParseImportJson(text);
+    if (!parsed) { toast('Ce e în clipboard nu e un JSON valid — încearcă "Lipește din text" mai jos', 'error'); return; }
     if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite din clipboard? Datele curente se pierd.')) return;
-    const ok = applyImportedData(result.data);
+    const ok = applyImportedData(parsed);
     toast(ok ? 'Date importate din clipboard' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
     if (ok) closeSync();
-  } catch(e){ toast('Nu am putut citi din clipboard — permite accesul sau folosește lipirea manuală de mai jos', 'error'); }
+  } catch(e){ toast('Nu am putut citi automat din clipboard — folosește "Lipește din text" mai jos', 'error'); }
 }
 function importDataFromManualText(){
-  const el = document.getElementById('manual-import-text');
-  if (!el || !el.value.trim()) { toast('Lipește mai întâi textul JSON în căsuță', 'error'); return; }
-  const result = tryParseImportJson(el.value);
-  if (!result.ok) { toast('Textul lipit nu e un JSON valid — verifică dacă ai copiat tot, de la prima { până la ultima }', 'error'); return; }
+  const ta = document.getElementById('manual-import-text');
+  const raw = ta ? ta.value : '';
+  if (!raw || !raw.trim()) { toast('Lipește mai întâi textul în casetă', 'error'); return; }
+  const parsed = tryParseImportJson(raw);
+  if (!parsed) { toast('Textul lipit nu e un JSON valid', 'error'); return; }
   if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite? Datele curente se pierd.')) return;
-  const ok = applyImportedData(result.data);
+  const ok = applyImportedData(parsed);
   toast(ok ? 'Date importate' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
-  if (ok) { el.value = ''; closeSync(); }
+  if (ok) { if (ta) ta.value = ''; closeSync(); }
 }
 function triggerImport(){ document.getElementById('import-file-input').click(); }
 function handleImportFile(file){
   const reader = new FileReader();
   reader.onload = () => {
-    const result = tryParseImportJson(reader.result);
-    if (!result.ok) { toast('Fișierul nu e un JSON valid', 'error'); return; }
-    if (!result.data || typeof result.data !== 'object') { toast('Fișierul nu are structura așteptată', 'error'); return; }
+    const parsed = tryParseImportJson(reader.result);
+    if (!parsed || typeof parsed !== 'object') { toast('Fișierul nu e un JSON valid', 'error'); return; }
     if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele din acest backup? Datele curente se pierd.')) return;
-    const ok = applyImportedData(result.data);
+    const ok = applyImportedData(parsed);
     toast(ok ? 'Backup importat cu succes' : 'Fișierul nu are structura așteptată', ok ? undefined : 'error');
     if (ok) closeSync();
   };
@@ -1502,7 +1477,7 @@ function handleImportFile(file){
   reader.readAsText(file);
 }
 function openSync(){ syncOpen = true; renderOverlay(); flushPendingSaves(); }
-function closeSync(){ syncOpen = false; renderOverlay(); }
+function closeSync(){ syncOpen = false; manualCopyText = null; renderOverlay(); }
 
 /* =========================================================
    AUTO-SYNC TO A LOCAL FILE (File System Access API)
@@ -1752,324 +1727,6 @@ function disconnectSyncFile(){
   clearSyncHandleFromDB();
   if (syncOpen) renderOverlay();
   toast('Auto-sync oprit');
-}
-
-/* =========================================================
-   GOOGLE DRIVE AUTO-SYNC — the cross-device option that also
-   works on a phone (the File System Access section above only
-   works in Chrome/Edge on desktop). Uses Google Identity
-   Services for a client-side OAuth token — no server, no client
-   secret needed — and talks to the Drive API v3 directly via
-   fetch(). Scope is drive.file, the narrowest Drive scope that
-   exists: this app can only ever see/write the ONE file it
-   creates for itself, never the rest of the person's Drive.
-
-   Requires a Google Cloud OAuth Client ID pasted into
-   GOOGLE_CLIENT_ID below — until then this whole section stays
-   hidden in the Sync overlay (mirrors how the file-sync section
-   hides itself on unsupported browsers).
-
-   Known fragility, disclosed in the UI itself: silently
-   refreshing the access token on return visits depends on the
-   browser allowing a background call to accounts.google.com —
-   Safari on iPhone often blocks this (ITP / third-party cookie
-   rules), so that device may need an occasional manual
-   "Reconectează" tap instead of it just working invisibly the
-   way it usually does on desktop Chrome.
-========================================================= */
-const GOOGLE_CLIENT_ID = '964772057012-dv9t3ujqj84tbvf9ig2j43jjoj275ipa.apps.googleusercontent.com';
-const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const GOOGLE_SYNC_FILENAME = 'os-antrenor-sync.json';
-function isGoogleDriveConfigured(){ return !!GOOGLE_CLIENT_ID; }
-
-let gDriveTokenClient = null;
-let gDriveAccessToken = null;
-let gDriveTokenExpiresAt = 0;
-let gDriveFileId = null;
-let gDriveNeedsReconnect = false;
-let gDriveWriteTimer = null;
-let gDrivePollTimer = null;
-let gDriveBusy = false;
-
-function waitForGoogleIdentity(timeoutMs){
-  return new Promise((resolve) => {
-    const start = Date.now();
-    (function check(){
-      if (window.google && window.google.accounts && window.google.accounts.oauth2) { resolve(true); return; }
-      if (Date.now() - start > timeoutMs) { resolve(false); return; }
-      setTimeout(check, 150);
-    })();
-  });
-}
-function ensureGoogleTokenClient(){
-  if (gDriveTokenClient) return gDriveTokenClient;
-  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) return null;
-  gDriveTokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: GOOGLE_DRIVE_SCOPE,
-    callback: () => {}, // overridden per-call in requestGoogleToken
-  });
-  return gDriveTokenClient;
-}
-// Requests a fresh access token. `interactive` controls whether Google is
-// allowed to show a consent/account picker screen — false is used for the
-// silent "try to reuse the existing grant" path (page load, background
-// polling), true is used for the explicit "Conectează Google Drive" tap.
-async function requestGoogleToken(interactive){
-  const available = await waitForGoogleIdentity(interactive ? 6000 : 3000);
-  if (!available) return false;
-  const client = ensureGoogleTokenClient();
-  if (!client) return false;
-  return new Promise((resolve) => {
-    client.callback = (resp) => {
-      if (resp && resp.access_token) {
-        gDriveAccessToken = resp.access_token;
-        gDriveTokenExpiresAt = Date.now() + ((resp.expires_in || 3600) * 1000) - 60000;
-        gDriveNeedsReconnect = false;
-        resolve(true);
-      } else {
-        resolve(false);
-      }
-    };
-    client.error_callback = () => resolve(false);
-    try { client.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
-    catch(e){ resolve(false); }
-  });
-}
-async function driveGetValidToken(interactive){
-  if (gDriveAccessToken && Date.now() < gDriveTokenExpiresAt) return gDriveAccessToken;
-  const ok = await requestGoogleToken(interactive);
-  return ok ? gDriveAccessToken : null;
-}
-// Finds the sync file this app created earlier (on this device or another
-// one signed into the same Google account), or creates it the very first
-// time. The id is cached in appMeta so later saves/reads skip the search.
-async function driveEnsureFileId(token){
-  if (gDriveFileId) return gDriveFileId;
-  if (appMeta.gDriveFileId) { gDriveFileId = appMeta.gDriveFileId; return gDriveFileId; }
-  const q = encodeURIComponent("name='" + GOOGLE_SYNC_FILENAME + "' and trashed=false");
-  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)', {
-    headers: { Authorization: 'Bearer ' + token },
-  });
-  if (!res.ok) throw new Error('drive list failed: ' + res.status);
-  const data = await res.json();
-  if (data.files && data.files.length) {
-    gDriveFileId = data.files[0].id;
-  } else {
-    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: GOOGLE_SYNC_FILENAME }),
-    });
-    if (!createRes.ok) throw new Error('drive create failed: ' + createRes.status);
-    const created = await createRes.json();
-    gDriveFileId = created.id;
-  }
-  appMeta.gDriveFileId = gDriveFileId;
-  saveMeta();
-  return gDriveFileId;
-}
-function scheduleGoogleDriveWrite(){
-  if (!appMeta.gDriveConnected || gDriveNeedsReconnect) return;
-  clearTimeout(gDriveWriteTimer);
-  gDriveWriteTimer = setTimeout(driveWrite, 1500);
-}
-async function driveWrite(){
-  if (!appMeta.gDriveConnected || gDriveNeedsReconnect || gDriveBusy) return;
-  gDriveBusy = true;
-  try {
-    const token = await driveGetValidToken(false);
-    if (!token) { gDriveNeedsReconnect = true; if (syncOpen) renderOverlay(); return; }
-    const fileId = await driveEnsureFileId(token);
-
-    // Guard against clobbering another device's newer save. Without this, any
-    // local edit on THIS device blindly overwrites the whole Drive file — so
-    // if the phone saved something this device hasn't pulled down yet (e.g.
-    // this device was just reopened, or the 90s poll hasn't run yet), the
-    // very next keystroke here would silently erase it. Check what's
-    // actually in Drive right now before overwriting it; if it's newer than
-    // the last state THIS device is known to have incorporated, pull it in
-    // instead and skip this push — the next edit will push the merged state.
-    try {
-      const checkRes = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
-        headers: { Authorization: 'Bearer ' + token },
-      });
-      if (checkRes.ok) {
-        const checkText = await checkRes.text();
-        if (checkText && checkText.trim()) {
-          const remoteParsed = JSON.parse(checkText);
-          if (remoteParsed && remoteParsed.exportedAt && remoteParsed.data) {
-            const remoteTime = new Date(remoteParsed.exportedAt).getTime();
-            const knownTime = appMeta.driveLastAppliedAt ? new Date(appMeta.driveLastAppliedAt).getTime() : 0;
-            if (remoteTime && remoteTime > knownTime) {
-              const active = document.activeElement;
-              const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
-              if (!isEditing && applyImportedData(remoteParsed)) {
-                appMeta.driveLastAppliedAt = remoteParsed.exportedAt;
-                saveMeta();
-                toast('Am găsit date mai noi în Drive — le-am adus în loc să le suprascriu ☁');
-              }
-              return; // don't push over what we just found — next edit re-saves from the merged state
-            }
-          }
-        }
-      }
-    } catch(e){ /* pre-check failed (offline blip, bad JSON) — fall through and write anyway rather than blocking sync entirely */ }
-
-    const payload = buildExportPayload();
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
-      method: 'PATCH',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('drive write failed: ' + res.status);
-    // This device's own write IS the latest known state — remember its
-    // stamp so the next read-back (ours or a poll) doesn't re-apply it.
-    appMeta.driveLastAppliedAt = payload.exportedAt;
-    saveMeta();
-    markBackedUp();
-  } catch(e){
-    console.warn('Google Drive write failed', e);
-  } finally {
-    gDriveBusy = false;
-  }
-}
-async function driveRead(auto){
-  if (!appMeta.gDriveConnected || gDriveNeedsReconnect || gDriveBusy) return;
-  gDriveBusy = true;
-  try {
-    const token = await driveGetValidToken(false);
-    if (!token) { gDriveNeedsReconnect = true; if (syncOpen) renderOverlay(); return; }
-    const fileId = await driveEnsureFileId(token);
-    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
-      headers: { Authorization: 'Bearer ' + token },
-    });
-    if (!res.ok) throw new Error('drive read failed: ' + res.status);
-    const text = await res.text();
-    if (!text || !text.trim()) return; // freshly-created empty file — nothing to pull yet
-    let parsed;
-    try { parsed = JSON.parse(text); } catch(e){ return; }
-    if (!parsed || !parsed.exportedAt || !parsed.data) { if (!auto) toast('Fișierul din Drive nu are un backup valid încă', 'error'); return; }
-    const fileTime = new Date(parsed.exportedAt).getTime();
-    const knownTime = appMeta.driveLastAppliedAt ? new Date(appMeta.driveLastAppliedAt).getTime() : 0;
-    if (!fileTime || fileTime <= knownTime) { if (!auto) toast('Ești deja la zi — nimic nou în Drive'); return; }
-    if (auto) {
-      // Never yank data out from under someone mid-keystroke — a background
-      // check simply tries again next time (next poll, or next focus).
-      const active = document.activeElement;
-      const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
-      if (isEditing) return;
-    }
-    const ok = applyImportedData(parsed);
-    if (ok) {
-      appMeta.driveLastAppliedAt = parsed.exportedAt;
-      saveMeta();
-      toast(auto ? 'Date actualizate din Google Drive ☁' : 'Date aduse din Google Drive');
-    } else if (!auto) {
-      toast('Fișierul din Drive nu are structura așteptată', 'error');
-    }
-  } catch(e){
-    console.warn('Google Drive read failed', e);
-    if (!auto) toast('Nu am putut citi din Google Drive', 'error');
-  } finally {
-    gDriveBusy = false;
-  }
-}
-function startGoogleDrivePolling(){
-  stopGoogleDrivePolling();
-  gDrivePollTimer = setInterval(() => driveRead(true), 90000);
-}
-function stopGoogleDrivePolling(){
-  if (gDrivePollTimer) { clearInterval(gDrivePollTimer); gDrivePollTimer = null; }
-}
-async function connectGoogleDrive(){
-  if (!isGoogleDriveConfigured()) { toast('Google Drive nu e configurat încă în aplicație', 'error'); return; }
-  const client = ensureGoogleTokenClient();
-  if (!client) {
-    const available = await waitForGoogleIdentity(4000);
-    if (!available || !ensureGoogleTokenClient()) { toast('Serviciul Google nu s-a încărcat — verifică conexiunea și reîncearcă', 'error'); return; }
-  }
-  const ok = await requestGoogleToken(true);
-  if (!ok) { toast('Conectarea la Google a fost anulată sau a eșuat', 'error'); return; }
-  try {
-    const fileId = await driveEnsureFileId(gDriveAccessToken);
-    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
-      headers: { Authorization: 'Bearer ' + gDriveAccessToken },
-    });
-    // Same safety net as the local-file connect flow: if the file already
-    // has data (from another device signed into the same account), ask
-    // before silently overwriting it with whatever's on THIS device.
-    let pulledExisting = false;
-    if (res.ok) {
-      const text = await res.text();
-      if (text && text.trim()) {
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && parsed.exportedAt && parsed.data) {
-            const hasLocalData = state.leads.length || state.calendar.posts.length ||
-              Object.values(state.content.ideas || {}).some(list => (list||[]).length);
-            const shouldPull = !hasLocalData || confirm(
-              'Fișierul din Google Drive are deja date salvate (probabil de pe alt dispozitiv). Le aduci pe acest dispozitiv acum?\n\n' +
-              'Recomandat — altfel le suprascrii cu ce ai pe acest dispozitiv.'
-            );
-            if (shouldPull && applyImportedData(parsed)) {
-              appMeta.driveLastAppliedAt = parsed.exportedAt;
-              pulledExisting = true;
-            }
-          }
-        } catch(e){ /* not valid JSON yet — treat as brand new file */ }
-      }
-    }
-    appMeta.gDriveConnected = true;
-    gDriveNeedsReconnect = false;
-    saveMeta();
-    if (!pulledExisting) await driveWrite();
-    startGoogleDrivePolling();
-    toast(pulledExisting ? 'Google Drive conectat — date aduse din Drive' : 'Google Drive conectat — rămâne conectat și după refresh');
-  } catch(e){
-    console.warn('Google Drive connect failed', e);
-    toast('Nu am putut conecta Google Drive', 'error');
-  }
-  if (syncOpen) renderOverlay();
-}
-async function reconnectGoogleDrive(){
-  const ok = await requestGoogleToken(true);
-  if (ok) {
-    gDriveNeedsReconnect = false;
-    await driveRead(true);
-    startGoogleDrivePolling();
-    toast('Reconectat la Google Drive — auto-sync activ din nou');
-  } else {
-    toast('Reconectarea a eșuat — încearcă din nou', 'error');
-  }
-  if (syncOpen) renderOverlay();
-}
-function disconnectGoogleDrive(){
-  appMeta.gDriveConnected = false;
-  gDriveNeedsReconnect = false;
-  gDriveAccessToken = null;
-  gDriveTokenExpiresAt = 0;
-  stopGoogleDrivePolling();
-  saveMeta();
-  if (syncOpen) renderOverlay();
-  toast('Google Drive deconectat');
-}
-// Called at startup: if this device connected before, try to silently pick
-// the grant back up (no popup) so auto-sync resumes without a tap. If the
-// browser blocks the silent reissue (common on iPhone Safari, which limits
-// third-party cookies), we surface a single "Reconectează" button instead
-// of failing silently.
-async function tryRestoreGoogleDrive(){
-  if (!isGoogleDriveConfigured() || !appMeta.gDriveConnected) return;
-  const ok = await requestGoogleToken(false);
-  if (ok) {
-    gDriveNeedsReconnect = false;
-    await driveRead(true);
-    startGoogleDrivePolling();
-  } else {
-    gDriveNeedsReconnect = true;
-  }
-  if (syncOpen) renderOverlay();
 }
 
 /* =========================================================
@@ -2543,18 +2200,14 @@ function convertVictoryToStory(leadId){
   const lead = state.leads.find(l => l.id === leadId);
   if (!lead) return;
   pushUndo();
-  // Prefer the live, editable arc (respects any renaming/edits the person made
-  // in "Tipuri de Story — ghid rapid"); fall back to the original built-in
-  // phrasing if that arc was since renamed away or deleted entirely.
-  const liveArc = state.storyArcs.find(a => a.name === 'Dovadă Socială / Victorie Client');
-  const d = (liveArc && liveArc.drafts) || STORY_DRAFTS[2];
+  const d = STORY_DRAFTS[2]; // Dovadă Socială / Victorie Client
   const item = {
     id: uid(), arcName: 'Dovadă Socială / Victorie Client', createdAt: new Date().toISOString(), date: todayISO(),
     steps: [
       { key: 'hook', label: 'Hook', text: 'Rezultatul lui ' + lead.name + ' chiar merită arătat 👇' },
       { key: 'context', label: 'Context', text: pickDraft(d.context) },
       { key: 'tensiune', label: 'Tensiune / Dovadă', text: (lead.value ? 'Rezultat: pachet de ' + formatEUR(lead.value) + '. ' : '') + pickDraft(d.tensiune) },
-      { key: 'trigger', label: 'Trigger DM', text: state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.') },
+      { key: 'trigger', label: 'Trigger DM', text: state.brand.ctaText || pickDraft(d.trigger) },
     ],
   };
   state.storyVault.items.unshift(item);
@@ -2880,11 +2533,12 @@ function computeDailyQuests(){
 ========================================================= */
 let editStoryId = null;
 function buildStoryItem(idx){
-  const arc = state.storyArcs[idx] || state.storyArcs[0];
+  const arc = STORY_ARCS[idx];
+  const drafts = STORY_DRAFTS[idx];
   return {
     id: uid(), arcIndex: idx, arcName: arc.name, createdAt: new Date().toISOString(),
     steps: STORY_STEPS.map(s => {
-      let text = s.key === 'trigger' ? '' : pickDraft(arc.drafts && arc.drafts[s.key]);
+      let text = pickDraft(drafts[s.key]) || '';
       if (s.key === 'trigger') {
         text = state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.');
       }
@@ -2898,7 +2552,7 @@ function generateStorySequence(dateIso){
   // recommendation) in the "Tip Story ghidaj" picker — it's a suggestion,
   // not a lock, so you can still change it on the generated card after.
   const presetType = getEffectiveDayStoryType(iso);
-  const presetIdx = presetType ? state.storyArcs.findIndex(a => a.name === presetType) : -1;
+  const presetIdx = presetType ? STORY_ARCS.findIndex(a => a.name === presetType) : -1;
   const idx = presetIdx >= 0 ? presetIdx : todayArcIndex();
   pushUndo();
   const item = buildStoryItem(idx);
@@ -2916,7 +2570,7 @@ function generateStorySequence(dateIso){
 function changeStoryArc(storyId, newArcName){
   const idx = state.storyVault.items.findIndex(s => s.id === storyId);
   if (idx < 0) return;
-  const newIdx = state.storyArcs.findIndex(a => a.name === newArcName);
+  const newIdx = STORY_ARCS.findIndex(a => a.name === newArcName);
   if (newIdx < 0) return;
   pushUndo();
   const originalDate = state.storyVault.items[idx].date;
@@ -2927,53 +2581,7 @@ function changeStoryArc(storyId, newArcName){
   saveKey('storyVault', state.storyVault);
   editStoryId = storyId;
   renderCalendar();
-  toast('Tip schimbat — draft nou generat pentru „'+state.storyArcs[newIdx].name+'"');
-}
-// Regenerates a single step (Hook/Context/Tensiune) by picking a new random
-// variant from that arc's pool — different from the current text when the
-// pool has more than one option. "trigger" has no pool (see buildStoryItem);
-// regenerating it just resets it to your current Brand CTA, which is also a
-// legitimate use if you'd hand-edited it away and want the default back.
-function regenerateStoryStep(storyId, stepKey){
-  const item = state.storyVault.items.find(s => s.id === storyId);
-  if (!item) return;
-  const step = item.steps.find(s => s.key === stepKey);
-  if (!step) return;
-  if (stepKey === 'trigger') {
-    pushUndo();
-    step.text = state.brand.ctaText || (state.brand.keyword ? 'Scrie „' + state.brand.keyword + '" în comentarii și îți trimit tot în DM.' : 'Scrie-mi în DM pentru detalii.');
-    saveKey('storyVault', state.storyVault);
-    renderCalendar();
-    toast('Trigger resetat la CTA-ul tău din Brand');
-    return;
-  }
-  const arc = state.storyArcs.find(a => a.name === item.arcName);
-  const pool = (arc && arc.drafts && arc.drafts[stepKey]) ? arc.drafts[stepKey].filter(Boolean) : [];
-  if (!pool.length) { toast('Adaugă întâi variante pentru acest pas — în Ghid rapid, mai jos', 'error'); return; }
-  const alternatives = pool.filter(t => t !== step.text);
-  pushUndo();
-  step.text = alternatives.length ? pickDraft(alternatives) : pickDraft(pool);
-  saveKey('storyVault', state.storyVault);
-  renderCalendar();
-  toast('Pas regenerat');
-}
-// Regenerates the whole idea from scratch — same arc, brand-new random pick
-// for every step — without losing the card's identity/position or its date.
-function regenerateStoryIdea(storyId){
-  const idx = state.storyVault.items.findIndex(s => s.id === storyId);
-  if (idx < 0) return;
-  const item = state.storyVault.items[idx];
-  const arcIdx = state.storyArcs.findIndex(a => a.name === item.arcName);
-  if (arcIdx < 0) { toast('Nu găsesc arcul narativ al acestei idei', 'error'); return; }
-  pushUndo();
-  const fresh = buildStoryItem(arcIdx);
-  fresh.id = storyId;
-  fresh.date = item.date;
-  state.storyVault.items[idx] = fresh;
-  saveKey('storyVault', state.storyVault);
-  editStoryId = storyId;
-  renderCalendar();
-  toast('Idee regenerată de la 0');
+  toast('Tip schimbat — draft nou generat pentru „'+STORY_ARCS[newIdx].name+'"');
 }
 let storyStepSaveTimer = null;
 function updateStoryStep(storyId, stepKey, value){
@@ -2986,62 +2594,6 @@ function updateStoryStep(storyId, stepKey, value){
 }
 function startEditStory(id){ editStoryId = id; renderCalendar(); }
 function finishEditStory(){ editStoryId = null; renderCalendar(); }
-
-/* =========================================================
-   MUTATIONS — Story Arcs (editable "Tipuri de Story — ghid rapid")
-   Lets the person rename/restyle/delete the built-in narrative arcs and
-   add their own, including the phrase pools the generator/regenerator
-   pick from for Hook/Context/Tensiune.
-========================================================= */
-let editingStoryArcId = null;
-function addStoryArc(){
-  pushUndo();
-  const arc = { id: uid(), name: 'Tip nou', desc: '', drafts: { hook: [], context: [], tensiune: [] } };
-  state.storyArcs.push(arc);
-  saveKey('storyArcs', state.storyArcs);
-  editingStoryArcId = arc.id;
-  renderCalendar();
-  toast('Tip nou adăugat — completează-l mai jos');
-  setTimeout(() => {
-    const el = document.getElementById('story-arc-' + arc.id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 80);
-}
-function startEditStoryArc(id){ editingStoryArcId = id; renderCalendar(); }
-function cancelEditStoryArc(){ editingStoryArcId = null; renderCalendar(); }
-function saveStoryArc(id){
-  const arc = state.storyArcs.find(a => a.id === id);
-  if (!arc) return;
-  const nameInput = document.getElementById('storyarc-name-' + id);
-  const descInput = document.getElementById('storyarc-desc-' + id);
-  const hookInput = document.getElementById('storyarc-hook-' + id);
-  const contextInput = document.getElementById('storyarc-context-' + id);
-  const tensiuneInput = document.getElementById('storyarc-tensiune-' + id);
-  const splitLines = (el) => el ? el.value.split('\n').map(t => t.trim()).filter(Boolean) : [];
-  if (!nameInput || !nameInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
-  pushUndo();
-  arc.name = nameInput.value.trim();
-  arc.desc = descInput ? descInput.value.trim() : arc.desc;
-  arc.drafts = {
-    hook: splitLines(hookInput),
-    context: splitLines(contextInput),
-    tensiune: splitLines(tensiuneInput),
-  };
-  saveKey('storyArcs', state.storyArcs);
-  editingStoryArcId = null;
-  renderCalendar();
-  toast('Tip salvat');
-}
-function deleteStoryArc(id){
-  if (state.storyArcs.length <= 1) { toast('Trebuie să rămână cel puțin un tip', 'error'); return; }
-  if (!confirm('Ștergi acest tip de Story? Ideile deja generate cu el rămân neschimbate, dar nu vei mai putea genera altele noi cu el.')) return;
-  pushUndo();
-  state.storyArcs = state.storyArcs.filter(a => a.id !== id);
-  if (editingStoryArcId === id) editingStoryArcId = null;
-  saveKey('storyArcs', state.storyArcs);
-  renderCalendar();
-  toast('Tip șters');
-}
 function deleteStorySequence(id){
   if (!confirm('Ștergi această secvență de Story? Nu poate fi recuperată.')) return;
   pushUndo();
@@ -3085,11 +2637,6 @@ function getCalendarDates(offsetDays){
   for (let i=0;i<CALENDAR_SPAN_DAYS;i++){ const d = new Date(start); d.setDate(start.getDate()+i); out.push(d); }
   return out;
 }
-const FUNNEL_STAGES = [
-  { key: 'tofu', label: 'TOFU — Atragere (rece)', color: '#60A5FA' },
-  { key: 'mofu', label: 'MOFU — Încredere (cald)', color: '#FBBF24' },
-  { key: 'bofu', label: 'BOFU — Conversie (fierbinte)', color: '#34D399' },
-];
 const CONTENT_TYPES = [
   { stage: 'TOFU — Atragere (rece)', color: '#60A5FA', items: [
     'Educativ / Tehnic',
@@ -3119,22 +2666,9 @@ const CONTENT_TYPES = [
     'Garanție / Risk Reversal',
   ]},
 ];
-// state.contentTypes holds the user's editable copy of the funnel-stage
-// content types (name + stage key), seeded once from CONTENT_TYPES above.
-// Everything that needs to display/select a content type reads the live,
-// editable list — CONTENT_TYPES itself is only ever used as seed data.
-function defaultContentTypesSeed(){
-  const stageKeys = ['tofu', 'mofu', 'bofu'];
-  const out = [];
-  CONTENT_TYPES.forEach((grp, i) => grp.items.forEach(name => out.push({ id: uid(), name, stage: stageKeys[i] || 'tofu' })));
-  return out;
-}
 function contentTypeStage(value){
-  const list = state.contentTypes || [];
-  const item = list.find(t => t.name === value);
-  if (!item) return null;
-  const stage = FUNNEL_STAGES.find(s => s.key === item.stage) || FUNNEL_STAGES[0];
-  return { stage: stage.label, color: stage.color };
+  const g = CONTENT_TYPES.find(grp => grp.items.includes(value));
+  return g || null;
 }
 const STORY_DAY_TYPES = [
   { stage: 'TOFU — Atragere', color: '#60A5FA', items: [
@@ -3195,56 +2729,6 @@ function getEffectiveDayStoryType(iso){
   const thisDate = new Date(iso + 'T00:00:00');
   const weeksDiff = Math.round((thisDate - anchor) / (7*24*60*60*1000));
   return (weeksDiff % repeatWeeks === 0) ? types : [];
-}
-
-/* =========================================================
-   MUTATIONS — Content Types (editable "Etapă funnel" options)
-   Managed via a dropdown in the Posts area (Content → Content), rather
-   than a chip list like Story's arcs — pick an existing type to edit it,
-   or "+ Adaugă tip nou" to create one.
-========================================================= */
-let funnelTypeManageId = null; // null = nothing picked, an id = editing that type, '__new__' = add form
-function selectFunnelTypeManage(value){
-  funnelTypeManageId = value || null;
-  renderCalendar();
-}
-function addContentType(){
-  const nameInput = document.getElementById('funnel-new-name');
-  const stageSelect = document.getElementById('funnel-new-stage');
-  if (!nameInput || !nameInput.value.trim()) { toast('Scrie un titlu pentru noul tip', 'error'); return; }
-  const name = nameInput.value.trim();
-  if (state.contentTypes.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Există deja un tip cu acest titlu', 'error'); return; }
-  pushUndo();
-  const type = { id: uid(), name, stage: stageSelect ? stageSelect.value : 'tofu' };
-  state.contentTypes.push(type);
-  saveKey('contentTypes', state.contentTypes);
-  funnelTypeManageId = type.id;
-  renderCalendar();
-  toast('Tip adăugat');
-}
-function saveContentType(id){
-  const type = state.contentTypes.find(t => t.id === id);
-  if (!type) return;
-  const nameInput = document.getElementById('funnel-edit-name-' + id);
-  const stageSelect = document.getElementById('funnel-edit-stage-' + id);
-  if (!nameInput || !nameInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
-  pushUndo();
-  type.name = nameInput.value.trim();
-  type.stage = stageSelect ? stageSelect.value : type.stage;
-  saveKey('contentTypes', state.contentTypes);
-  funnelTypeManageId = null;
-  renderCalendar();
-  toast('Tip salvat');
-}
-function deleteContentType(id){
-  if (state.contentTypes.length <= 1) { toast('Trebuie să rămână cel puțin un tip', 'error'); return; }
-  if (!confirm('Ștergi acest tip de conținut? Postările deja etichetate cu el rămân neschimbate.')) return;
-  pushUndo();
-  state.contentTypes = state.contentTypes.filter(t => t.id !== id);
-  funnelTypeManageId = null;
-  saveKey('contentTypes', state.contentTypes);
-  renderCalendar();
-  toast('Tip șters');
 }
 
 /* =========================================================
@@ -4561,7 +4045,7 @@ function onNotesInput(text){
 ========================================================= */
 async function resetAllData(){
   if (!confirm('Sigur vrei să ștergi toate datele salvate (tot — obiectiv, checklist, calendar, lead-uri, conținut, resurse, notițe, brand, gamification)? Această acțiune nu poate fi anulată. Poți exporta un backup înainte, din meniu.')) return;
-  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault'), deleteKey('storyArcs'), deleteKey('contentTypes'), deleteKey('scrollStoppers'), deleteKey('screenTime')]);
+  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault')]);
   QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
   state = {
     goal: { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE },
@@ -4582,10 +4066,6 @@ async function resetAllData(){
     brand: { name:'', subtitle:'', keyword:'', ctaText:'', baseLink:'', dmConversions:0, savedCTAs:[] },
     gamification: { xp: 0, milestonesShown: [] },
     storyVault: { items: [], weeklyFlags: {} },
-    storyArcs: defaultStoryArcsSeed(),
-    contentTypes: defaultContentTypesSeed(),
-    scrollStoppers: [],
-    screenTime: { apps: [], totalTargetMinutes: 0, logs: {} },
   };
   notesState = seedNotes();
   undoStack = []; redoStack = [];
@@ -5158,60 +4638,6 @@ function renderChecklist(){
     '</div>';
   }).join('');
 
-  const todayTotal = screenTimeTodayTotal();
-  const totalTarget = state.screenTime.totalTargetMinutes || 0;
-  // More is better here — this is productive time (content, PC work,
-  // research), not wasted time — so a target is a minimum to reach, not a
-  // cap: hitting or clearing it is the good outcome (green), and there is
-  // no "over budget" failure state.
-  const totalMeetsGoal = totalTarget > 0 && todayTotal >= totalTarget;
-  const totalPct = totalTarget > 0 ? Math.round((todayTotal / totalTarget) * 100) : null;
-  const screenTimeAppRow = (a) => {
-    const todayLog = state.screenTime.logs[todayISO()];
-    const mins = (todayLog && todayLog.perApp && todayLog.perApp[a.id]) || '';
-    const numMins = Number(mins) || 0;
-    const meetsGoal = a.targetMinutes > 0 && numMins >= a.targetMinutes;
-    // Progress bar shows how close today's minutes are to the (minimum)
-    // target — it's allowed to fill past 100%, the bar itself just caps
-    // visually at full width while the percentage label keeps counting up.
-    const pct = a.targetMinutes > 0 ? Math.round((numMins / a.targetMinutes) * 100) : null;
-    return '<div style="margin-bottom:12px;">' +
-      '<div class="flex gap-2 items-center">' +
-        '<div class="shrink-0" style="width:24px; text-align:center;">'+screenTimeIconHtml(a.icon, 20)+'</div>' +
-        '<div class="flex-1" style="min-width:0;">' +
-          '<p class="text-sm truncate" style="font-weight:600;">'+escapeHtml(a.name)+'</p>' +
-          (a.targetMinutes ? '<p class="text-xs mute3">obiectiv: cel puțin '+a.targetMinutes+' min/zi</p>' : '') +
-        '</div>' +
-        '<input data-field="screentime-app-minutes" data-id="'+a.id+'" type="number" min="0" value="'+mins+'" placeholder="min azi" style="width:90px; '+(meetsGoal?'color:#6ee7b7; border-color:rgba(52,211,153,.4);':'')+'" />' +
-      '</div>' +
-      (pct !== null ? (
-        '<div class="flex items-center gap-2" style="margin-top:6px; margin-left:32px;">' +
-          '<div class="progress-track-sm" style="flex:1;"><div class="progress-fill" style="width:'+Math.min(pct,100)+'%; '+(meetsGoal?'background:#34D399;':'')+'"></div></div>' +
-          '<span class="text-xs tabular" style="min-width:36px; text-align:right; '+(meetsGoal?'color:#6ee7b7; font-weight:700;':'color:var(--text-faint);')+'">'+pct+'%</span>' +
-        '</div>'
-      ) : '') +
-    '</div>';
-  };
-  const screenTimeCard = '<div class="card" style="border-top:3px solid var(--accent-border);">' +
-    '<div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:14px;">' +
-      '<p class="eyebrow" style="margin:0;">⏱️ Productivitate</p>' +
-      '<div class="flex items-center gap-2">' +
-        '<button data-action="open-screentime-stats" class="btn btn-sm">📊 Statistici</button>' +
-        '<button data-action="open-screentime-settings" class="icon-btn" aria-label="Setări productivitate">'+icon('settings','icon-sm')+'</button>' +
-      '</div>' +
-    '</div>' +
-    (state.screenTime.apps.length
-      ? state.screenTime.apps.map(screenTimeAppRow).join('')
-      : '<p class="text-xs mute3 italic" style="margin-bottom:10px;">Nicio activitate urmărită încă — adaugă una din setări ('+icon('settings','icon-sm')+').</p>') +
-    '<div style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">' +
-      '<div class="flex items-center justify-between gap-2 flex-wrap">' +
-        '<p class="text-sm" style="font-weight:700; '+(totalMeetsGoal?'color:#6ee7b7;':'')+'">Total azi: '+todayTotal+' min'+(totalTarget?' / '+totalTarget+' min obiectiv':'')+'</p>' +
-        (totalPct !== null ? '<span class="text-sm tabular" style="font-weight:700; '+(totalMeetsGoal?'color:#6ee7b7;':'color:var(--text-faint);')+'">'+totalPct+'%</span>' : '') +
-      '</div>' +
-      (totalPct !== null ? '<div class="progress-track" style="margin-top:8px;"><div class="progress-fill" style="width:'+Math.min(totalPct,100)+'%; '+(totalMeetsGoal?'background:#34D399;':'')+'"></div></div>' : '') +
-    '</div>' +
-  '</div>';
-
   document.getElementById('content').innerHTML =
   '<div class="animate-fade flex-col gap-5" style="display:flex;">' +
     '<div class="flex items-center justify-between flex-wrap gap-3">' +
@@ -5222,7 +4648,6 @@ function renderChecklist(){
       '<button data-action="reset-day" class="btn">'+icon('refresh','icon-sm')+'Reset Zilnic</button>' +
     '</div>' +
     '<div class="progress-track"><div class="progress-fill" style="width:'+cs.pct+'%"></div></div>' +
-    screenTimeCard +
     '<div class="grid grid-1-3">' + catHtml + '</div>' +
   '</div>';
 }
@@ -5269,13 +4694,11 @@ function renderContentPosts(){
       '</div>' +
       '<select data-daytype="'+iso+'" class="mb-1" style="font-size:11px; margin-bottom:6px; color:'+(dayType ? (contentTypeStage(dayType)||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
         '<option value="">Etapă funnel — nesetat</option>' +
-        FUNNEL_STAGES.map(stage => {
-          const items = state.contentTypes.filter(t => t.stage === stage.key);
-          if (!items.length) return '';
-          return '<optgroup label="'+stage.label+'">' +
-            items.map(t => '<option value="'+escapeAttr(t.name)+'" '+(t.name===dayType?'selected':'')+'>'+escapeHtml(t.name)+'</option>').join('') +
-          '</optgroup>';
-        }).join('') +
+        CONTENT_TYPES.map(grp =>
+          '<optgroup label="'+grp.stage+'">' +
+            grp.items.map(ct => '<option value="'+escapeAttr(ct)+'" '+(ct===dayType?'selected':'')+'>'+escapeHtml(ct)+'</option>').join('') +
+          '</optgroup>'
+        ).join('') +
       '</select>' +
       (dayType && contentTypeStage(dayType)
         ? '<p class="text-xs mb-3" style="margin-bottom:14px; color:'+contentTypeStage(dayType).color+'; font-weight:600;">'+contentTypeStage(dayType).stage.split(' — ')[0]+(dayTypeIsRecommended?' <span class="mute3" style="font-weight:400; font-style:italic;">· recomandat</span>':'')+'</p>'
@@ -5584,50 +5007,6 @@ function renderContentPosts(){
         : '<p class="text-xs mute3 italic">Nicio idee adăugată încă în Shot List.</p>') +
     '</div>' +
 
-    '<div class="card">' +
-      '<h3 class="h2 mb-1" style="margin-bottom:4px;">Etape Funnel — gestionează tipurile</h3>' +
-      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Tipurile din selectorul „Etapă funnel" de mai sus — alege unul ca să-i schimbi titlul sau etapa, sau adaugă unul nou.</p>' +
-      '<select id="funnel-type-manage-select" style="margin-bottom:10px;">' +
-        '<option value="">— alege un tip de editat —</option>' +
-        '<option value="__new__"'+(funnelTypeManageId==='__new__'?' selected':'')+'>+ Adaugă tip nou</option>' +
-        FUNNEL_STAGES.map(stage => {
-          const items = state.contentTypes.filter(t => t.stage === stage.key);
-          if (!items.length) return '';
-          return '<optgroup label="'+stage.label+'">' +
-            items.map(t => '<option value="'+t.id+'"'+(funnelTypeManageId===t.id?' selected':'')+'>'+escapeHtml(t.name)+'</option>').join('') +
-          '</optgroup>';
-        }).join('') +
-      '</select>' +
-      (funnelTypeManageId === '__new__'
-        ? '<div style="background:rgba(0,0,0,.2); border-radius:8px; padding:10px;">' +
-            '<label class="field-label">Titlu</label>' +
-            '<input id="funnel-new-name" type="text" placeholder="ex: Provocare 7 zile" style="margin-bottom:8px;" />' +
-            '<label class="field-label">Etapă</label>' +
-            '<select id="funnel-new-stage" style="margin-bottom:10px;">' +
-              FUNNEL_STAGES.map(stage => '<option value="'+stage.key+'">'+stage.label+'</option>').join('') +
-            '</select>' +
-            '<button data-action="add-content-type" class="btn btn-sm btn-primary w-full" style="justify-content:center;">Adaugă</button>' +
-          '</div>'
-        : '') +
-      (funnelTypeManageId && funnelTypeManageId !== '__new__' && state.contentTypes.some(t => t.id === funnelTypeManageId)
-        ? (() => {
-            const t = state.contentTypes.find(x => x.id === funnelTypeManageId);
-            return '<div style="background:rgba(0,0,0,.2); border-radius:8px; padding:10px;">' +
-              '<label class="field-label">Titlu</label>' +
-              '<input id="funnel-edit-name-'+t.id+'" type="text" value="'+escapeAttr(t.name)+'" style="margin-bottom:8px;" />' +
-              '<label class="field-label">Etapă</label>' +
-              '<select id="funnel-edit-stage-'+t.id+'" style="margin-bottom:10px;">' +
-                FUNNEL_STAGES.map(stage => '<option value="'+stage.key+'"'+(stage.key===t.stage?' selected':'')+'>'+stage.label+'</option>').join('') +
-              '</select>' +
-              '<div class="flex gap-2">' +
-                '<button data-action="save-content-type" data-id="'+t.id+'" class="btn btn-sm btn-primary flex-1" style="justify-content:center;">Salvează</button>' +
-                '<button data-action="delete-content-type" data-id="'+t.id+'" class="btn btn-sm danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
-              '</div>' +
-            '</div>';
-          })()
-        : '') +
-    '</div>' +
-
   '</div>';
 }
 function renderContentStory(){
@@ -5688,17 +5067,10 @@ function renderContentStory(){
             return '<div id="story-block-'+item.id+'" class="card" style="background:rgba(0,0,0,.22); border-color:var(--accent-border);">' +
               '<label class="field-label">Tip Story (arc narativ)</label>' +
               '<select data-storyarcselect="'+item.id+'" style="margin-bottom:10px;">' +
-                state.storyArcs.map(a => '<option value="'+escapeAttr(a.name)+'" '+(a.name===item.arcName?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('') +
+                STORY_ARCS.map(a => '<option value="'+escapeAttr(a.name)+'" '+(a.name===item.arcName?'selected':'')+'>'+escapeHtml(a.name)+'</option>').join('') +
               '</select>' +
-              item.steps.map(s => '<div class="mt-2" style="margin-top:8px;">' +
-                '<div class="flex items-center justify-between">' +
-                  '<label class="field-label" style="margin-bottom:0;">'+s.label+'</label>' +
-                  '<button data-action="regenerate-story-step" data-id="'+item.id+'" data-step="'+s.key+'" class="icon-btn" aria-label="Regenerează" title="Regenerează doar acest pas">'+icon('refresh','icon-sm')+'</button>' +
-                '</div>' +
-                '<textarea data-story="'+item.id+'" data-storystep="'+s.key+'" placeholder="'+STORY_STEPS.find(x=>x.key===s.key).hint+'" style="min-height:50px;">'+escapeHtml(s.text)+'</textarea>' +
-              '</div>').join('') +
-              '<button data-action="regenerate-story-idea" data-id="'+item.id+'" class="btn btn-dashed btn-sm w-full mt-3" style="justify-content:center;">'+icon('refresh','icon-sm')+'Regenerează tot, de la 0</button>' +
-              '<button data-action="finish-edit-story" class="btn btn-sm btn-primary w-full mt-2" style="justify-content:center;">Gata</button>' +
+              item.steps.map(s => '<div class="mt-2" style="margin-top:8px;"><label class="field-label">'+s.label+'</label><textarea data-story="'+item.id+'" data-storystep="'+s.key+'" placeholder="'+STORY_STEPS.find(x=>x.key===s.key).hint+'" style="min-height:50px;">'+escapeHtml(s.text)+'</textarea></div>').join('') +
+              '<button data-action="finish-edit-story" class="btn btn-sm btn-primary w-full mt-3" style="justify-content:center;">Gata</button>' +
             '</div>';
           }
           const filled = item.steps.filter(s=>s.text.trim()).length;
@@ -5746,45 +5118,15 @@ function renderContentStory(){
 
     '<div class="card">' +
       '<h3 class="h2 mb-1" style="margin-bottom:4px;">Tipuri de Story — ghid rapid</h3>' +
-      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Arcurile narative din care alegi când generezi o secvență — fiecare cu structura Hook → Context → Dovadă → Trigger. Editează-le, șterge-le sau adaugă altele noi — variantele de mai jos (una pe linie) sunt exact ce alege la întâmplare butonul de regenerare.</p>' +
+      '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Cele 7 arcuri narative din care alegi când generezi o secvență — fiecare cu structura Hook → Context → Dovadă → Trigger.</p>' +
       '<div class="flex-col gap-3" style="display:flex;">' +
-        state.storyArcs.map(a => {
-          const isEditingArc = editingStoryArcId === a.id;
-          if (isEditingArc) {
-            return '<div id="story-arc-'+a.id+'" class="chip" style="border-color:var(--accent-border);">' +
-              '<label class="field-label">Titlu</label>' +
-              '<input id="storyarc-name-'+a.id+'" type="text" value="'+escapeAttr(a.name)+'" style="margin-bottom:8px;" />' +
-              '<label class="field-label">Descriere</label>' +
-              '<textarea id="storyarc-desc-'+a.id+'" style="min-height:44px; margin-bottom:8px;">'+escapeHtml(a.desc)+'</textarea>' +
-              '<label class="field-label">Hook — variante (una pe linie)</label>' +
-              '<textarea id="storyarc-hook-'+a.id+'" style="min-height:60px; margin-bottom:8px; font-size:12px;">'+escapeHtml((a.drafts.hook||[]).join('\n'))+'</textarea>' +
-              '<label class="field-label">Context — variante (una pe linie)</label>' +
-              '<textarea id="storyarc-context-'+a.id+'" style="min-height:60px; margin-bottom:8px; font-size:12px;">'+escapeHtml((a.drafts.context||[]).join('\n'))+'</textarea>' +
-              '<label class="field-label">Tensiune / Dovadă — variante (una pe linie)</label>' +
-              '<textarea id="storyarc-tensiune-'+a.id+'" style="min-height:60px; margin-bottom:10px; font-size:12px;">'+escapeHtml((a.drafts.tensiune||[]).join('\n'))+'</textarea>' +
-              '<div class="flex gap-2">' +
-                '<button data-action="save-story-arc" data-id="'+a.id+'" class="btn btn-sm btn-primary flex-1">Salvează</button>' +
-                '<button data-action="cancel-edit-story-arc" class="btn btn-sm">Anulează</button>' +
-              '</div>' +
-            '</div>';
-          }
-          const poolCount = ['hook','context','tensiune'].map(k => (a.drafts[k]||[]).length);
-          return '<div id="story-arc-'+a.id+'" class="chip">' +
-            '<div class="flex items-start justify-between gap-2">' +
-              '<div style="min-width:0;">' +
-                '<p class="text-sm" style="font-weight:700; color:var(--accent);">'+escapeHtml(a.name)+'</p>' +
-                (a.desc ? '<p class="text-xs mute2 mt-1" style="margin-top:4px;">'+escapeHtml(a.desc)+'</p>' : '') +
-                '<p class="text-xs mute3 mt-1" style="margin-top:4px;">'+poolCount[0]+' variante Hook · '+poolCount[1]+' Context · '+poolCount[2]+' Tensiune</p>' +
-              '</div>' +
-              '<div class="row-actions shrink-0">' +
-                '<button data-action="edit-story-arc" data-id="'+a.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
-                '<button data-action="delete-story-arc" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        }).join('') +
+        STORY_ARCS.map(a => (
+          '<div class="chip">' +
+            '<p class="text-sm" style="font-weight:700; color:var(--accent);">'+escapeHtml(a.name)+'</p>' +
+            '<p class="text-xs mute2 mt-1" style="margin-top:4px;">'+escapeHtml(a.desc)+'</p>' +
+          '</div>'
+        )).join('') +
       '</div>' +
-      '<button data-action="add-story-arc" class="btn btn-dashed btn-sm w-full mt-3" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă tip nou</button>' +
     '</div>' +
   '</div>';
 }
@@ -6356,296 +5698,6 @@ function resizeImageFileToDataUrl(file, size, quality){
     reader.readAsDataURL(file);
   });
 }
-// Unlike resizeImageFileToDataUrl (which center-crops to a square, good for
-// round profile photos), this scales down preserving the original aspect
-// ratio and never crops — needed for presentation screenshots (Scroll
-// Stopper hook examples) which are usually tall Instagram post crops where
-// cutting anything off would lose the actual hook text.
-function resizeImageFileToDataUrlFit(file, maxDim, quality){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('read failed'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('decode failed'));
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-/* =========================================================
-   MUTATIONS — Scroll Stopper (hook-type reference library, Resurse)
-========================================================= */
-let pendingScrollStopperImage = null;
-let editingScrollStopperId = null;
-function handleScrollStopperImageSelect(input){
-  const file = input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
-  if (file.size > 8*1024*1024) { toast('Poza e prea mare (max 8MB)', 'error'); return; }
-  resizeImageFileToDataUrlFit(file, 640, 0.85).then(dataUrl => {
-    pendingScrollStopperImage = dataUrl;
-    renderResources();
-  }).catch(() => toast('Nu am putut încărca poza', 'error'));
-}
-function removePendingScrollStopperImage(){
-  pendingScrollStopperImage = null;
-  renderResources();
-}
-function addScrollStopper(){
-  const titleInput = document.getElementById('new-scrollstopper-title');
-  const descInput = document.getElementById('new-scrollstopper-desc');
-  const linkInput = document.getElementById('new-scrollstopper-link');
-  if (!titleInput || !titleInput.value.trim()) { toast('Scrie un titlu pentru tipul de hook', 'error'); return; }
-  pushUndo();
-  state.scrollStoppers.unshift({
-    id: uid(),
-    title: titleInput.value.trim(),
-    description: descInput ? descInput.value.trim() : '',
-    image: pendingScrollStopperImage,
-    exampleLink: linkInput ? linkInput.value.trim() : '',
-    addedAt: new Date().toISOString(),
-  });
-  pendingScrollStopperImage = null;
-  saveKey('scrollStoppers', state.scrollStoppers);
-  render();
-  toast('Hook adăugat în Scroll Stopper');
-}
-function startEditScrollStopper(id){ editingScrollStopperId = id; renderResources(); }
-function cancelEditScrollStopper(){ editingScrollStopperId = null; renderResources(); }
-function saveScrollStopper(id){
-  const item = state.scrollStoppers.find(s => s.id === id);
-  if (!item) return;
-  const titleInput = document.getElementById('edit-scrollstopper-title-' + id);
-  const descInput = document.getElementById('edit-scrollstopper-desc-' + id);
-  const linkInput = document.getElementById('edit-scrollstopper-link-' + id);
-  if (!titleInput || !titleInput.value.trim()) { toast('Titlul nu poate fi gol', 'error'); return; }
-  pushUndo();
-  item.title = titleInput.value.trim();
-  item.description = descInput ? descInput.value.trim() : item.description;
-  item.exampleLink = linkInput ? linkInput.value.trim() : item.exampleLink;
-  saveKey('scrollStoppers', state.scrollStoppers);
-  editingScrollStopperId = null;
-  renderResources();
-  toast('Salvat');
-}
-function deleteScrollStopper(id){
-  if (!confirm('Ștergi acest tip de hook din Scroll Stopper?')) return;
-  pushUndo();
-  state.scrollStoppers = state.scrollStoppers.filter(s => s.id !== id);
-  if (editingScrollStopperId === id) editingScrollStopperId = null;
-  saveKey('scrollStoppers', state.scrollStoppers);
-  renderResources();
-  toast('Șters');
-}
-function handleScrollStopperImageReplace(id, input){
-  const file = input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
-  if (file.size > 8*1024*1024) { toast('Poza e prea mare (max 8MB)', 'error'); return; }
-  resizeImageFileToDataUrlFit(file, 640, 0.85).then(dataUrl => {
-    pushUndo();
-    const item = state.scrollStoppers.find(s => s.id === id);
-    if (item) item.image = dataUrl;
-    saveKey('scrollStoppers', state.scrollStoppers);
-    renderResources();
-  }).catch(() => toast('Nu am putut încărca poza', 'error'));
-}
-function deleteScrollStopperImage(id){
-  pushUndo();
-  const item = state.scrollStoppers.find(s => s.id === id);
-  if (item) item.image = null;
-  saveKey('scrollStoppers', state.scrollStoppers);
-  renderResources();
-}
-
-/* =========================================================
-   MUTATIONS — Productivitate (Execuție Zilnică)
-   Manual, self-reported log per activity per day (no OS-level access is
-   possible from a web page to read real usage — phone or PC). Deliberately
-   framed as time to maximize, not a cap: exceeding a target is the good
-   outcome here, never a "budget" to stay under.
-   state.screenTime = { apps, totalTargetMinutes, logs } where logs is keyed
-   by ISO date -> { perApp: { appId: minutes } }. (Internal names kept as
-   "screenTime"/"apps" from the original build — user-facing text says
-   "Productivitate"/"activitate" throughout.)
-========================================================= */
-let editingScreenTimeAppId = null;
-let screenTimeStatsOpen = false;
-let screenTimeSettingsOpen = false;
-let screenTimeStatsMode = 'week'; // 'week' | 'month'
-let pendingScreenTimeAppIcon = null; // photo uploaded for the add-new-activity form
-let editingScreenTimeAppIcon = null; // photo uploaded while editing an existing activity
-function screenTimeIconHtml(iconValue, size){
-  const s = size || 20;
-  if (iconValue && iconValue.indexOf('data:') === 0) return '<img src="'+escapeAttr(iconValue)+'" alt="" style="width:'+s+'px; height:'+s+'px; object-fit:cover; border-radius:6px; vertical-align:middle;" />';
-  return '<span style="display:inline-flex; align-items:center; justify-content:center; width:'+s+'px; height:'+s+'px; border-radius:6px; background:rgba(255,255,255,.06); color:var(--text-faint); vertical-align:middle;">'+icon('image','icon-sm')+'</span>';
-}
-function handleScreenTimeAppIconUpload(input, mode){
-  const file = input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('Alege un fișier imagine', 'error'); return; }
-  if (file.size > 5*1024*1024) { toast('Poza e prea mare (max 5MB)', 'error'); return; }
-  resizeImageFileToDataUrl(file, 64, 0.85).then(dataUrl => {
-    if (mode === 'edit') editingScreenTimeAppIcon = dataUrl; else pendingScreenTimeAppIcon = dataUrl;
-    renderOverlay();
-  }).catch(() => toast('Nu am putut încărca poza', 'error'));
-}
-function removeScreenTimeAppIcon(mode){
-  if (mode === 'edit') editingScreenTimeAppIcon = null; else pendingScreenTimeAppIcon = null;
-  renderOverlay();
-}
-function openScreenTimeSettings(){
-  screenTimeSettingsOpen = true;
-  screenTimeStatsOpen = false;
-  pendingScreenTimeAppIcon = null;
-  editingScreenTimeAppId = null;
-  editingScreenTimeAppIcon = null;
-  renderOverlay();
-}
-function closeScreenTimeSettings(){
-  screenTimeSettingsOpen = false;
-  editingScreenTimeAppId = null;
-  editingScreenTimeAppIcon = null;
-  pendingScreenTimeAppIcon = null;
-  renderOverlay();
-  renderChecklist();
-}
-function addScreenTimeApp(){
-  const nameInput = document.getElementById('new-screentime-app-name');
-  const targetInput = document.getElementById('new-screentime-app-target');
-  if (!nameInput || !nameInput.value.trim()) { toast('Scrie numele activității', 'error'); return; }
-  pushUndo();
-  const name = nameInput.value.trim();
-  state.screenTime.apps.push({
-    id: uid(),
-    name: name,
-    targetMinutes: targetInput && targetInput.value ? Math.max(0, parseInt(targetInput.value, 10) || 0) : 0,
-    icon: pendingScreenTimeAppIcon || null,
-  });
-  pendingScreenTimeAppIcon = null;
-  saveKey('screenTime', state.screenTime);
-  renderOverlay();
-  toast('Activitate adăugată');
-}
-function startEditScreenTimeApp(id){
-  editingScreenTimeAppId = id;
-  const app = state.screenTime.apps.find(a => a.id === id);
-  editingScreenTimeAppIcon = app ? (app.icon || null) : null;
-  renderOverlay();
-}
-function cancelEditScreenTimeApp(){ editingScreenTimeAppId = null; editingScreenTimeAppIcon = null; renderOverlay(); }
-function saveScreenTimeApp(id){
-  const app = state.screenTime.apps.find(a => a.id === id);
-  if (!app) return;
-  const nameInput = document.getElementById('edit-screentime-app-name-' + id);
-  const targetInput = document.getElementById('edit-screentime-app-target-' + id);
-  if (!nameInput || !nameInput.value.trim()) { toast('Numele nu poate fi gol', 'error'); return; }
-  pushUndo();
-  app.name = nameInput.value.trim();
-  app.targetMinutes = targetInput && targetInput.value ? Math.max(0, parseInt(targetInput.value, 10) || 0) : 0;
-  app.icon = editingScreenTimeAppIcon;
-  saveKey('screenTime', state.screenTime);
-  editingScreenTimeAppId = null;
-  editingScreenTimeAppIcon = null;
-  renderOverlay();
-  toast('Salvat');
-}
-function deleteScreenTimeApp(id){
-  if (!confirm('Ștergi această activitate din monitorizare? Istoricul deja înregistrat pentru ea rămâne în statistici.')) return;
-  pushUndo();
-  state.screenTime.apps = state.screenTime.apps.filter(a => a.id !== id);
-  if (editingScreenTimeAppId === id) editingScreenTimeAppId = null;
-  saveKey('screenTime', state.screenTime);
-  renderOverlay();
-  toast('Șters');
-}
-function ensureScreenTimeLog(iso){
-  if (!state.screenTime.logs[iso] || !state.screenTime.logs[iso].perApp) state.screenTime.logs[iso] = { perApp: {} };
-  return state.screenTime.logs[iso];
-}
-function setScreenTimeMinutes(appId, value){
-  const iso = todayISO();
-  const minutes = Math.max(0, parseInt(value, 10) || 0);
-  const log = ensureScreenTimeLog(iso);
-  if (minutes) log.perApp[appId] = minutes; else delete log.perApp[appId];
-  if (!Object.keys(log.perApp).length) delete state.screenTime.logs[iso];
-  saveKey('screenTime', state.screenTime);
-  // Deferred one tick: this fires on 'change' (blur), and this card can have
-  // several of these minute inputs sitting right next to each other — if the
-  // person Tabs from one straight into the next, a synchronous re-render here
-  // tears down the very element the browser is mid-way through focusing,
-  // which throws "node to be removed is no longer a child of this node".
-  // Letting the blur/focus transition finish first avoids that race.
-  setTimeout(renderChecklist, 0);
-}
-function updateScreenTimeTotalTarget(value){
-  state.screenTime.totalTargetMinutes = Math.max(0, parseInt(value, 10) || 0);
-  saveKey('screenTime', state.screenTime);
-  setTimeout(renderOverlay, 0);
-}
-function screenTimeTodayTotal(){
-  const log = state.screenTime.logs[todayISO()];
-  if (!log || !log.perApp) return 0;
-  return Object.values(log.perApp).reduce((a, b) => a + b, 0);
-}
-function openScreenTimeStats(){ screenTimeStatsOpen = true; screenTimeSettingsOpen = false; renderOverlay(); }
-function closeScreenTimeStats(){ screenTimeStatsOpen = false; renderOverlay(); }
-function setScreenTimeStatsMode(mode){ screenTimeStatsMode = mode; renderOverlay(); }
-// Groups the raw daily logs into the last N weeks or months (most recent
-// first). A day with no log at all counts as 0 minutes — there's no way to
-// tell "forgot to log" from "didn't use it" with self-reported data, so we
-// treat missing the same as zero, same as most screen-time-limit tools do.
-function screenTimePeriodStats(mode){
-  const today = new Date(); today.setHours(0,0,0,0);
-  const count = mode === 'week' ? 10 : 6;
-  const periods = [];
-  for (let i = 0; i < count; i++) {
-    let start, end, label;
-    if (mode === 'week') {
-      const dow = (today.getDay() + 6) % 7;
-      const thisWeekStart = new Date(today); thisWeekStart.setDate(today.getDate() - dow);
-      start = new Date(thisWeekStart); start.setDate(thisWeekStart.getDate() - 7 * i);
-      end = new Date(start); end.setDate(start.getDate() + 6);
-      label = formatShortDate(start) + ' – ' + formatShortDate(end);
-    } else {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      start = new Date(d.getFullYear(), d.getMonth(), 1);
-      end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      label = RO_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
-    }
-    const cappedEnd = end < today ? end : today;
-    const daysInPeriod = Math.max(1, Math.round((cappedEnd - start) / 86400000) + 1);
-    const perApp = {};
-    let total = 0;
-    for (let dd = new Date(start); dd <= cappedEnd; dd.setDate(dd.getDate() + 1)) {
-      const iso = dateToISO(dd);
-      const log = state.screenTime.logs[iso];
-      if (log && log.perApp) {
-        Object.keys(log.perApp).forEach(appId => {
-          perApp[appId] = (perApp[appId] || 0) + log.perApp[appId];
-          total += log.perApp[appId];
-        });
-      }
-    }
-    periods.push({ label, total, perApp, daysInPeriod });
-  }
-  return periods;
-}
-
 function handleAccountPhotoSelect(id, input){
   const file = input.files && input.files[0];
   input.value = '';
@@ -7537,73 +6589,6 @@ function renderResources(){
     '</p>';
   }).join('');
 
-  const scrollStopperCardHtml = (s) => {
-    const isEditing = editingScrollStopperId === s.id;
-    if (isEditing) {
-      return '<div class="card" style="border-color:var(--accent-border);">' +
-        '<label class="field-label">Titlu</label><input id="edit-scrollstopper-title-'+s.id+'" type="text" value="'+escapeAttr(s.title)+'" style="margin-bottom:8px;" />' +
-        '<label class="field-label">Descriere</label><textarea id="edit-scrollstopper-desc-'+s.id+'" style="min-height:70px; margin-bottom:8px;">'+escapeHtml(s.description||'')+'</textarea>' +
-        '<label class="field-label">Imagine de prezentare</label>' +
-        '<div class="flex items-center gap-2" style="margin-bottom:8px;">' +
-          (s.image ? '<img src="'+escapeAttr(s.image)+'" alt="" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid var(--line);" />' : '') +
-          '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+(s.image?'Schimbă poza':'Adaugă poză')+
-            '<input type="file" accept="image/*" data-action-file="existing-scrollstopper-image" data-id="'+s.id+'" style="display:none;" />' +
-          '</label>' +
-          (s.image ? '<button data-action="delete-scrollstopper-image" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge poza">'+icon('trash','icon-sm')+'</button>' : '') +
-        '</div>' +
-        '<label class="field-label">Link exemplu (Instagram)</label>' +
-        '<input id="edit-scrollstopper-link-'+s.id+'" type="text" placeholder="https://instagram.com/p/…" value="'+escapeAttr(s.exampleLink||'')+'" style="margin-bottom:8px;" />' +
-        '<div class="flex justify-end gap-2">' +
-          '<button data-action="save-scrollstopper" data-id="'+s.id+'" class="btn btn-sm btn-primary">Salvează</button>' +
-          '<button data-action="cancel-edit-scrollstopper" class="btn btn-sm">Anulează</button>' +
-        '</div>' +
-      '</div>';
-    }
-    return '<div class="card" style="padding:0; overflow:hidden;">' +
-      (s.image
-        ? '<img src="'+escapeAttr(s.image)+'" alt="" style="width:100%; max-height:220px; object-fit:cover; display:block;" />'
-        : '<div style="width:100%; height:90px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.04); color:var(--text-faint);">'+icon('image','icon')+'</div>') +
-      '<div style="padding:14px;">' +
-        '<div class="flex items-start justify-between gap-3">' +
-          '<p class="text-sm flex-1" style="font-weight:700; color:rgba(245,245,240,.9);">'+escapeHtml(s.title)+'</p>' +
-          '<div class="row-actions shrink-0">' +
-            '<button data-action="edit-scrollstopper" data-id="'+s.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
-            '<button data-action="delete-scrollstopper" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
-          '</div>' +
-        '</div>' +
-        (s.description ? '<p class="text-xs muted mt-1" style="line-height:1.5; margin-top:6px;">'+escapeHtml(s.description)+'</p>' : '') +
-        (s.exampleLink ? '<a href="'+escapeAttr(s.exampleLink)+'" target="_blank" rel="noopener noreferrer" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:10px;">'+icon('external','icon-sm')+'Vezi exemplu pe Instagram</a>' : '') +
-      '</div>' +
-    '</div>';
-  };
-  const scrollStoppersHtml =
-    '<div class="card" style="border-top:3px solid var(--accent-border);">' +
-      '<p class="eyebrow" style="margin-bottom:4px;">⚡ Scroll Stopper — tipuri de hook-uri care merg acum</p>' +
-      '<p class="text-xs mute3" style="margin-bottom:12px;">Salvează aici tipurile de hook care opresc scroll-ul chiar acum, cu o descriere și un exemplu vizual, ca să le ai la îndemână când scrii un script nou.</p>' +
-      '<div class="card-dashed" style="padding:14px; margin-bottom:14px;">' +
-        '<label class="field-label">Titlu tip de hook</label>' +
-        '<input id="new-scrollstopper-title" type="text" placeholder="Ex: Întrebare controversată" style="margin-bottom:8px;" />' +
-        '<label class="field-label">Descriere</label>' +
-        '<textarea id="new-scrollstopper-desc" placeholder="Cum funcționează, de ce oprește scroll-ul…" style="min-height:60px; margin-bottom:8px;"></textarea>' +
-        '<label class="field-label">Link exemplu (Instagram, opțional)</label>' +
-        '<input id="new-scrollstopper-link" type="text" placeholder="https://instagram.com/p/…" style="margin-bottom:8px;" />' +
-        '<label class="field-label">Imagine de prezentare (opțional)</label>' +
-        '<div class="flex items-center gap-2" style="margin-bottom:10px;">' +
-          (pendingScrollStopperImage
-            ? ('<img src="'+escapeAttr(pendingScrollStopperImage)+'" alt="" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid var(--line);" />' +
-               '<button data-action="remove-pending-scrollstopper-image" class="icon-btn danger" aria-label="Șterge poza">'+icon('trash','icon-sm')+'</button>')
-            : '') +
-          '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+(pendingScrollStopperImage?'Schimbă poza':'Adaugă poză')+
-            '<input type="file" accept="image/*" data-action-file="new-scrollstopper-image" style="display:none;" />' +
-          '</label>' +
-        '</div>' +
-        '<button data-action="add-scrollstopper" class="btn btn-primary w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă în Scroll Stopper</button>' +
-      '</div>' +
-      (state.scrollStoppers.length
-        ? '<div class="grid grid-1-2">' + state.scrollStoppers.map(scrollStopperCardHtml).join('') + '</div>'
-        : '<p class="text-xs mute3 italic">Niciun tip de hook salvat încă.</p>') +
-    '</div>';
-
   const newGroupBlock = newGroupInputOpen
     ? '<div class="card-dashed" style="padding:14px;">' +
         '<div class="flex gap-2">' +
@@ -7645,8 +6630,6 @@ function renderResources(){
           '</div>'
         : '') +
     '</div>' +
-
-    scrollStoppersHtml +
   '</div>';
 }
 
@@ -7697,8 +6680,6 @@ function renderOverlay(){
   else if (postDetailFor) { root.innerHTML = postDetailOverlayHtml(postDetailFor); }
   else if (snippetOpenFor) { root.innerHTML = snippetOverlayHtml(); }
   else if (syncOpen) { root.innerHTML = syncOverlayHtml(); }
-  else if (screenTimeStatsOpen) { root.innerHTML = screenTimeStatsOverlayHtml(); }
-  else if (screenTimeSettingsOpen) { root.innerHTML = screenTimeSettingsOverlayHtml(); }
   else { root.innerHTML = ''; lastOverlayScrollTop = 0; return; }
   const newBody = root.querySelector('.overlay-body');
   if (newBody && prevScroll) newBody.scrollTop = prevScroll;
@@ -8010,17 +6991,27 @@ function syncOverlayHtml(){
             '<button data-action="export-data" class="btn w-full" style="justify-content:flex-start;">'+icon('cloud','icon-sm')+'Descarcă fișier .json</button>' +
             '<button data-action="copy-all-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Copiază tot în clipboard</button>' +
           '</div>' +
-          '<p class="text-xs mute3 mt-2">Copiază, apoi lipește într-un mesaj WhatsApp, o notă din Drive/iCloud etc. Pe celălalt dispozitiv, deschide aici din nou și folosește "Lipește din clipboard".</p>' +
+          (manualCopyText
+            ? '<div style="margin-top:10px;">' +
+                '<p class="text-xs" style="color:#fbbf24; margin-bottom:6px;">Copierea automată nu a mers aici — selectează tot textul de mai jos și copiază-l manual (Ctrl/Cmd+C, sau ține apăsat → Copiază pe telefon):</p>' +
+                '<textarea id="manual-copy-text" readonly rows="4" style="width:100%; font-family:monospace; font-size:11px;" onfocus="this.select()">'+escapeHtml(manualCopyText)+'</textarea>' +
+                '<button data-action="select-manual-copy-text" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:8px;">Selectează tot textul</button>' +
+              '</div>'
+            : '') +
+          '<p class="text-xs mute3 mt-2">Copiază, apoi lipește într-un mesaj WhatsApp, o notă din Drive/iCloud etc. Pe celălalt dispozitiv, deschide aici din nou și folosește "Lipește din text" mai jos (cea mai sigură metodă).</p>' +
         '</div>' +
         '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
           '<p class="eyebrow" style="margin-bottom:8px;">Primește date de pe alt dispozitiv</p>' +
+          '<div class="flex-col gap-2" style="display:flex; margin-bottom:10px;">' +
+            '<label class="text-xs mute3">Lipește din text (cea mai sigură metodă — funcționează peste tot, chiar și aici în preview)</label>' +
+            '<textarea id="manual-import-text" rows="4" placeholder="Lipește aici textul copiat de pe celălalt dispozitiv…" style="width:100%; font-family:monospace; font-size:12px;"></textarea>' +
+            '<button data-action="import-manual-text" class="btn w-full" style="justify-content:center;">'+icon('refresh','icon-sm')+'Importă din textul lipit</button>' +
+          '</div>' +
           '<div class="flex-col gap-2" style="display:flex;">' +
-            '<button data-action="paste-import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Lipește din clipboard</button>' +
+            '<button data-action="paste-import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Lipește direct din clipboard (nu merge peste tot)</button>' +
             '<button data-action="import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('refresh','icon-sm')+'Importă din fișier</button>' +
           '</div>' +
-          '<p class="text-xs mute3 mt-2">Toate trei înlocuiesc complet datele curente din acest dispozitiv. Telefonul și calculatorul NU au un clipboard comun — după ce apeși „Copiază tot" pe telefon, trebuie mai întâi să lipești acel text undeva ce ajunge și pe calculator (mesaj WhatsApp ție însuți, notă din Drive/iCloud/Keep etc.), apoi să-l copiezi de-acolo pe calculator. Dacă „Lipește din clipboard" zice că nu e JSON valid, cel mai sigur e să copiezi manual textul din acel mesaj/notă și să-l lipești mai jos:</p>' +
-          '<textarea id="manual-import-text" placeholder="…lipește aici direct textul JSON copiat de pe celălalt dispozitiv" style="min-height:70px; margin-top:8px; font-size:12px;"></textarea>' +
-          '<button data-action="import-manual-text" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:8px;">Importă din textul lipit</button>' +
+          '<p class="text-xs mute3 mt-2">Toate trei înlocuiesc complet datele curente din acest dispozitiv.</p>' +
         '</div>' +
         '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
           '<p class="eyebrow" style="margin-bottom:8px;">Auto-sync la un folder (experimental)</p>' +
@@ -8036,139 +7027,7 @@ function syncOverlayHtml(){
                       '</div>')
                 : '<button data-action="choose-sync-file" class="btn w-full" style="justify-content:flex-start;">'+icon('cloud','icon-sm')+'Alege fișierul de sincronizat</button>' +
                   '<p class="text-xs mute3 mt-2">Alege (sau creează) un fișier într-un folder sincronizat local pe acest calculator — Google Drive, iCloud sau OneDrive, poți să-l numești și „Claude" dacă vrei. Pe fiecare dispozitiv alegi ACELAȘI fișier din acel folder — primul dispozitiv îl creează, următoarele îl găsesc deja cu date și le preia automat, în loc să le suprascrie. Rămâne conectat și după refresh (poate cere un singur tap de reconfirmare — regulă de securitate a browserului, nu pierdere de date).</p>')
-            : '<p class="text-xs mute3">Nedisponibil în acest browser/dispozitiv — funcționează doar în Chrome sau Edge pe desktop, în afara unei ferestre de preview/iframe. Pe telefon, în Safari, în alte browsere, sau într-un preview, folosește Export ori Copiază în clipboard mai sus — acelea funcționează peste tot, doar că trebuie făcute manual pe fiecare dispozitiv.</p>') +
-        '</div>' +
-        '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Auto-sync cu Google Drive (merge și pe telefon)</p>' +
-          (isGoogleDriveConfigured()
-            ? (appMeta.gDriveConnected
-                ? (gDriveNeedsReconnect
-                    ? '<p class="text-xs" style="color:#fbbf24; margin-bottom:8px;">⚠ Conectat, dar sesiunea Google a expirat sau browserul a blocat reconectarea automată (des pe iPhone/Safari — normal, nu s-a pierdut nimic).</p>' +
-                      '<button data-action="reconnect-google-drive" class="btn btn-sm btn-primary w-full" style="justify-content:center;">'+icon('cloud','icon-sm')+'Reconectează cu un tap</button>'
-                    : '<p class="text-xs good-text" style="margin-bottom:8px;">✓ Activ — scrie automat în Drive la fiecare modificare și citește automat de acolo când redeschizi aplicația sau revii la ea (plus verificare din 90 în 90 de secunde cât stă deschisă).</p>' +
-                      '<div class="flex gap-2">' +
-                        '<button data-action="check-google-drive-now" class="btn btn-sm flex-1" style="justify-content:center;">'+icon('refresh','icon-sm')+'Verifică acum</button>' +
-                        '<button data-action="disconnect-google-drive" class="btn btn-sm flex-1" style="justify-content:center;">Oprește</button>' +
-                      '</div>')
-                : '<button data-action="connect-google-drive" class="btn w-full" style="justify-content:flex-start;">'+icon('cloud','icon-sm')+'Conectează Google Drive</button>' +
-                  '<p class="text-xs mute3 mt-2">Îți cere acces doar la UN singur fișier creat de aplicație în Drive-ul tău — nimic altceva din contul tău. Pe fiecare dispozitiv, inclusiv telefon, apeși același buton și te loghezi cu ACELAȘI cont Google: primul dispozitiv creează fișierul, următoarele îl găsesc deja cu date și le preiau automat, în loc să le suprascrie.</p>')
-            : '<p class="text-xs mute3">Nu e configurat încă — are nevoie de un Client ID din Google Cloud Console adăugat în cod. Odată configurat, funcționează pe orice dispozitiv, inclusiv telefon (spre deosebire de opțiunea de mai sus, care merge doar pe Chrome/Edge desktop).</p>') +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
-}
-
-function screenTimeStatsOverlayHtml(){
-  const apps = state.screenTime.apps;
-  const periods = screenTimePeriodStats(screenTimeStatsMode);
-  const totalTarget = state.screenTime.totalTargetMinutes || 0;
-  const modeSwitch = '<div class="flex gap-2" style="margin-bottom:14px;">' +
-    '<button data-action="set-screentime-stats-mode" data-mode="week" class="btn btn-sm'+(screenTimeStatsMode==='week'?' btn-active':'')+'">Pe săptămâni</button>' +
-    '<button data-action="set-screentime-stats-mode" data-mode="month" class="btn btn-sm'+(screenTimeStatsMode==='month'?' btn-active':'')+'">Pe luni</button>' +
-  '</div>';
-  const rows = periods.map(p => {
-    const appCells = apps.map(a => {
-      const mins = p.perApp[a.id] || 0;
-      const avgPerDay = mins / p.daysInPeriod;
-      const meetsGoal = a.targetMinutes ? avgPerDay >= a.targetMinutes : false;
-      return '<td class="tabular text-xs" style="'+(a.targetMinutes ? (meetsGoal ? 'color:#6ee7b7;' : '') : '')+'">'+Math.round(mins)+'</td>';
-    }).join('');
-    const totalMeetsGoal = totalTarget ? (p.total / p.daysInPeriod) >= totalTarget : false;
-    return '<tr>' +
-      '<td class="text-xs muted" style="white-space:nowrap; padding-right:10px;">'+escapeHtml(p.label)+'</td>' +
-      appCells +
-      '<td class="tabular text-xs" style="font-weight:700; '+(totalTarget ? (totalMeetsGoal ? 'color:#6ee7b7;' : '') : '')+'">'+Math.round(p.total)+'</td>' +
-      '<td class="tabular text-xs mute3">'+Math.round(p.total / p.daysInPeriod)+'</td>' +
-    '</tr>';
-  }).join('');
-  const table = apps.length
-    ? '<div style="overflow-x:auto;">' +
-        '<table style="width:100%; border-collapse:collapse;">' +
-          '<thead><tr>' +
-            '<th class="text-xs mute3" style="text-align:left; padding-right:10px;">Perioadă</th>' +
-            apps.map(a => '<th class="text-xs mute3" style="text-align:left; white-space:nowrap;" title="Obiectiv: cel puțin '+(a.targetMinutes||0)+' min/zi">'+screenTimeIconHtml(a.icon,14)+' '+escapeHtml(a.name)+'</th>').join('') +
-            '<th class="text-xs mute3" style="text-align:left;">Total</th>' +
-            '<th class="text-xs mute3" style="text-align:left;">Medie/zi</th>' +
-          '</tr></thead>' +
-          '<tbody>' + rows + '</tbody>' +
-        '</table>' +
-      '</div>' +
-      '<p class="text-xs mute3 mt-2" style="margin-top:10px;">Minute, însumate pe perioadă. O zi fără nicio valoare introdusă contează ca 0 minute — nu ca „necunoscut". '+(apps.some(a=>a.targetMinutes) || totalTarget ? 'Verde = ai atins sau depășit obiectivul zilnic (medie pe perioadă) — mai mult e mereu bine aici.' : '')+'</p>'
-    : '<p class="text-xs mute3 italic">Adaugă cel puțin o activitate urmărită (din setări) ca să vezi statistici aici.</p>';
-  return '<div class="overlay-backdrop" data-action="close-screentime-stats-backdrop">' +
-    '<div class="overlay-panel">' +
-      '<div class="overlay-head">' +
-        '<p class="h2">⏱️ Statistici Productivitate</p>' +
-        '<button data-action="close-screentime-stats" class="icon-btn">'+icon('x','icon')+'</button>' +
-      '</div>' +
-      '<div class="overlay-body flex-col gap-3" style="display:flex;">' +
-        modeSwitch +
-        table +
-      '</div>' +
-    '</div>' +
-  '</div>';
-}
-
-function screenTimeSettingsOverlayHtml(){
-  const totalTarget = state.screenTime.totalTargetMinutes || 0;
-  const photoPicker = (mode, currentIcon) => '<div class="flex items-center gap-2" style="margin-bottom:8px;">' +
-    screenTimeIconHtml(currentIcon, 28) +
-    '<label class="btn btn-sm" style="cursor:pointer;">'+icon('image','icon-sm')+'Încarcă poză' +
-      '<input type="file" accept="image/*" data-action-file="'+(mode==='edit'?'edit-screentime-app-icon':'new-screentime-app-icon')+'" style="display:none;" />' +
-    '</label>' +
-    (currentIcon ? '<button type="button" data-action="remove-screentime-icon" data-mode="'+mode+'" class="icon-btn" title="Șterge poza">'+icon('x','icon-sm')+'</button>' : '') +
-  '</div>';
-  const appRow = (a) => {
-    const isEditing = editingScreenTimeAppId === a.id;
-    if (isEditing) {
-      const previewIcon = editingScreenTimeAppIcon;
-      return '<div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,.15); border-radius:10px;">' +
-        photoPicker('edit', previewIcon) +
-        '<div class="flex gap-2 items-center">' +
-          '<input id="edit-screentime-app-name-'+a.id+'" type="text" value="'+escapeAttr(a.name)+'" class="flex-1" placeholder="Nume activitate" />' +
-          '<input id="edit-screentime-app-target-'+a.id+'" type="number" min="0" value="'+(a.targetMinutes||0)+'" style="width:80px;" placeholder="min/zi" />' +
-          '<button data-action="save-screentime-app" data-id="'+a.id+'" class="icon-btn ok">'+icon('check','icon-sm')+'</button>' +
-          '<button data-action="cancel-edit-screentime-app" class="icon-btn">'+icon('x','icon-sm')+'</button>' +
-        '</div>' +
-      '</div>';
-    }
-    return '<div class="flex gap-2 items-center" style="margin-bottom:8px;">' +
-      '<div class="shrink-0" style="width:28px; text-align:center;">'+screenTimeIconHtml(a.icon, 24)+'</div>' +
-      '<div class="flex-1" style="min-width:0;">' +
-        '<p class="text-sm truncate" style="font-weight:600;">'+escapeHtml(a.name)+'</p>' +
-        (a.targetMinutes ? '<p class="text-xs mute3">obiectiv: cel puțin '+a.targetMinutes+' min/zi</p>' : '<p class="text-xs mute3">fără obiectiv setat</p>') +
-      '</div>' +
-      '<button data-action="edit-screentime-app" data-id="'+a.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
-      '<button data-action="delete-screentime-app" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
-    '</div>';
-  };
-  return '<div class="overlay-backdrop" data-action="close-screentime-settings-backdrop">' +
-    '<div class="overlay-panel">' +
-      '<div class="overlay-head">' +
-        '<p class="h2">⚙️ Setări Productivitate</p>' +
-        '<button data-action="close-screentime-settings" class="icon-btn">'+icon('x','icon')+'</button>' +
-      '</div>' +
-      '<div class="overlay-body flex-col gap-4" style="display:flex;">' +
-        '<p class="text-xs mute3">Timp de productivitate — conținut, cercetare, inspirație, lucru la PC — nu timp pierdut: cu cât mai mult, cu atât mai bine. Obiectivele sunt un minim de atins, nu un plafon. Nu putem citi automat timpul petrecut pe telefon sau PC (fără acces la statisticile sistemului), așa că introdu manual minutele din Execuție Zilnică.</p>' +
-        '<div>' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Activități urmărite</p>' +
-          (state.screenTime.apps.length
-            ? state.screenTime.apps.map(appRow).join('')
-            : '<p class="text-xs mute3 italic" style="margin-bottom:10px;">Nicio activitate urmărită încă — adaugă una mai jos.</p>') +
-        '</div>' +
-        '<div style="padding-top:10px; border-top:1px solid var(--line);">' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Activitate nouă</p>' +
-          photoPicker('new', pendingScreenTimeAppIcon) +
-          '<div class="flex gap-2 items-center">' +
-            '<input id="new-screentime-app-name" type="text" placeholder="Activitate nouă (ex: Instagram, Canva, PC)" class="flex-1" />' +
-            '<input id="new-screentime-app-target" type="number" min="0" placeholder="obiectiv min/zi" style="width:120px;" />' +
-            '<button data-action="add-screentime-app" class="btn btn-icon shrink-0">'+icon('plus','icon-sm')+'</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="flex items-center justify-between gap-2 flex-wrap" style="padding-top:10px; border-top:1px solid var(--line);">' +
-          '<label class="text-sm" style="font-weight:600;">Obiectiv total zilnic (min)</label>' +
-          '<input data-field="screentime-total-target" type="number" min="0" value="'+(totalTarget||'')+'" style="width:90px;" />' +
+            : '<p class="text-xs mute3">Nedisponibil în acest browser/dispozitiv — funcționează doar în Chrome sau Edge pe desktop, în afara unei ferestre de preview/iframe. Pe telefon, în Safari, în alte browsere, sau într-un preview, folosește Export, Copiază în clipboard, sau Lipește din text mai jos — acelea funcționează peste tot, doar că trebuie făcute manual pe fiecare dispozitiv.</p>') +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -8314,16 +7173,6 @@ function onContentClick(e){
   else if (action === 'finish-edit-story') finishEditStory();
   else if (action === 'delete-story-sequence') deleteStorySequence(el.dataset.id);
   else if (action === 'copy-story-sequence') copyStorySequence(el.dataset.id);
-  else if (action === 'regenerate-story-step') regenerateStoryStep(el.dataset.id, el.dataset.step);
-  else if (action === 'regenerate-story-idea') regenerateStoryIdea(el.dataset.id);
-  else if (action === 'add-story-arc') addStoryArc();
-  else if (action === 'edit-story-arc') startEditStoryArc(el.dataset.id);
-  else if (action === 'cancel-edit-story-arc') cancelEditStoryArc();
-  else if (action === 'save-story-arc') saveStoryArc(el.dataset.id);
-  else if (action === 'delete-story-arc') deleteStoryArc(el.dataset.id);
-  else if (action === 'add-content-type') addContentType();
-  else if (action === 'save-content-type') saveContentType(el.dataset.id);
-  else if (action === 'delete-content-type') deleteContentType(el.dataset.id);
   else if (action === 'toggle-weekly-flag') toggleWeeklyFlag(el.dataset.flag);
   else if (action === 'open-filming-mode') openFilmingMode();
   else if (action === 'toggle-filming-energy') { const i=filmingEnergyFilter.indexOf(el.dataset.effort); if(i>=0) filmingEnergyFilter.splice(i,1); else filmingEnergyFilter.push(el.dataset.effort); renderFilmingMode(); }
@@ -8351,24 +7200,6 @@ function onContentClick(e){
   else if (action === 'toggle-pin-template') togglePinTemplate(el.dataset.id);
   else if (action === 'add-mindset-note') addMindsetNote();
   else if (action === 'delete-mindset-note') deleteMindsetNote(el.dataset.id);
-  else if (action === 'add-scrollstopper') addScrollStopper();
-  else if (action === 'remove-pending-scrollstopper-image') removePendingScrollStopperImage();
-  else if (action === 'edit-scrollstopper') startEditScrollStopper(el.dataset.id);
-  else if (action === 'cancel-edit-scrollstopper') cancelEditScrollStopper();
-  else if (action === 'save-scrollstopper') saveScrollStopper(el.dataset.id);
-  else if (action === 'delete-scrollstopper') deleteScrollStopper(el.dataset.id);
-  else if (action === 'delete-scrollstopper-image') deleteScrollStopperImage(el.dataset.id);
-  else if (action === 'add-screentime-app') addScreenTimeApp();
-  else if (action === 'edit-screentime-app') startEditScreenTimeApp(el.dataset.id);
-  else if (action === 'cancel-edit-screentime-app') cancelEditScreenTimeApp();
-  else if (action === 'save-screentime-app') saveScreenTimeApp(el.dataset.id);
-  else if (action === 'delete-screentime-app') deleteScreenTimeApp(el.dataset.id);
-  else if (action === 'open-screentime-stats') openScreenTimeStats();
-  else if (action === 'close-screentime-stats') closeScreenTimeStats();
-  else if (action === 'set-screentime-stats-mode') setScreenTimeStatsMode(el.dataset.mode);
-  else if (action === 'open-screentime-settings') openScreenTimeSettings();
-  else if (action === 'close-screentime-settings') closeScreenTimeSettings();
-  else if (action === 'remove-screentime-icon') removeScreenTimeAppIcon(el.dataset.mode);
   else if (action === 'open-add-group') { newGroupInputOpen = true; renderResources(); }
   else if (action === 'cancel-add-group') { newGroupInputOpen = false; renderResources(); }
   else if (action === 'confirm-add-group') addGroup();
@@ -8455,15 +7286,10 @@ function onContentClick(e){
   else if (action === 'disconnect-sync-file') disconnectSyncFile();
   else if (action === 'reconnect-sync-file') reconnectSyncFile();
   else if (action === 'check-sync-file-now') readSyncFile(false);
-  else if (action === 'connect-google-drive') connectGoogleDrive();
-  else if (action === 'disconnect-google-drive') disconnectGoogleDrive();
-  else if (action === 'reconnect-google-drive') reconnectGoogleDrive();
-  else if (action === 'check-google-drive-now') driveRead(false);
   else if (action === 'close-sync') closeSync();
   else if (action === 'close-sync-backdrop') { if (e.target === el) closeSync(); }
-  else if (action === 'close-screentime-stats-backdrop') { if (e.target === el) closeScreenTimeStats(); }
-  else if (action === 'close-screentime-settings-backdrop') { if (e.target === el) closeScreenTimeSettings(); }
   else if (action === 'copy-all-data') copyDataToClipboard();
+  else if (action === 'select-manual-copy-text') selectManualCopyText();
   else if (action === 'paste-import-data') pasteDataFromClipboard();
   else if (action === 'import-manual-text') importDataFromManualText();
   else if (action === 'qd-convert') qdConvertLead();
@@ -8558,8 +7384,6 @@ function onContentChange(e){
     else if (field === 'lead-igLink') updateLeadField(el.dataset.id, 'igLink', el.value);
     else if (field.indexOf('qualify-') === 0) setQualifyField(el.dataset.id, field.replace('qualify-',''), el.value);
     else if (field === 'ads-budget') updateAdsBudget(el.value);
-    else if (field === 'screentime-app-minutes') setScreenTimeMinutes(el.dataset.id, el.value);
-    else if (field === 'screentime-total-target') updateScreenTimeTotalTarget(el.value);
     return;
   }
   const dayTypeEl = e.target.closest('[data-daytype]');
@@ -8568,17 +7392,12 @@ function onContentChange(e){
   if (dayStoryTypeEl) { setDayStoryType(dayStoryTypeEl.dataset.daystorytype, Number(dayStoryTypeEl.dataset.storyslot), dayStoryTypeEl.value); renderCalendar(); return; }
   const storyArcEl = e.target.closest('[data-storyarcselect]');
   if (storyArcEl) { changeStoryArc(storyArcEl.dataset.storyarcselect, storyArcEl.value); return; }
-  if (e.target && e.target.id === 'funnel-type-manage-select') { selectFunnelTypeManage(e.target.value); return; }
   const fileEl = e.target.closest('[data-action-file]');
   if (fileEl) {
     const kind = fileEl.dataset.actionFile;
     if (kind === 'new-testimonial-media') handleTestimonialMediaSelect(fileEl);
     else if (kind === 'existing-testimonial-media') handleExistingTestimonialMediaSelect(fileEl.dataset.id, fileEl);
     else if (kind === 'account-photo') handleAccountPhotoSelect(fileEl.dataset.id, fileEl);
-    else if (kind === 'new-scrollstopper-image') handleScrollStopperImageSelect(fileEl);
-    else if (kind === 'existing-scrollstopper-image') handleScrollStopperImageReplace(fileEl.dataset.id, fileEl);
-    else if (kind === 'new-screentime-app-icon') handleScreenTimeAppIconUpload(fileEl, 'new');
-    else if (kind === 'edit-screentime-app-icon') handleScreenTimeAppIconUpload(fileEl, 'edit');
     return;
   }
   if (e.target && e.target.id === 'import-file-input' && e.target.files && e.target.files[0]) {
@@ -8761,9 +7580,9 @@ function bindEventsOnce(){
   window.addEventListener('beforeunload', onBeforeUnload);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPendingSaves();
-    else if (document.visibilityState === 'visible') { readSyncFile(true); driveRead(true); } // just came back — pull in whatever another device may have written meanwhile
+    else if (document.visibilityState === 'visible') { readSyncFile(true); } // just came back — pull in whatever another device may have written meanwhile
   });
-  window.addEventListener('focus', () => { readSyncFile(true); driveRead(true); });
+  window.addEventListener('focus', () => { readSyncFile(true); });
   window.addEventListener('scroll', onScrollForFab, { passive: true });
   document.addEventListener('scroll', trackOverlayScroll, { capture: true, passive: true });
   document.addEventListener('touchstart', onTooltipTouchStart, { passive: true });
@@ -8782,7 +7601,7 @@ function onScrollForFab(){
 }
 
 async function init(){
-  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault, storyArcs, contentTypes, scrollStoppers, screenTime] = await Promise.all([
+  const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault] = await Promise.all([
     loadKey('goal', null),
     loadKey('checklist', null),
     loadKey('calendar', { posts: [] }),
@@ -8805,10 +7624,6 @@ async function init(){
     loadKey('brand', null),
     loadKey('gamification', null),
     loadKey('storyVault', null),
-    loadKey('storyArcs', null),
-    loadKey('contentTypes', null),
-    loadKey('scrollStoppers', []),
-    loadKey('screenTime', null),
   ]);
 
   state.goal = goal || { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE };
@@ -8857,19 +7672,20 @@ async function init(){
   state.gamification = gamification || { xp: 0, milestonesShown: [] };
   state.storyVault = storyVault || { items: [], weeklyFlags: {} };
   if (state.storyVault.weeklyFlags === undefined) state.storyVault.weeklyFlags = {};
-  state.storyArcs = (storyArcs && storyArcs.length) ? storyArcs : defaultStoryArcsSeed();
-  state.contentTypes = (contentTypes && contentTypes.length) ? contentTypes : defaultContentTypesSeed();
-  state.scrollStoppers = scrollStoppers || [];
-  state.screenTime = screenTime || { apps: [], totalTargetMinutes: 0, logs: {} };
-  if (state.screenTime.apps === undefined) state.screenTime.apps = [];
-  if (state.screenTime.totalTargetMinutes === undefined) state.screenTime.totalTargetMinutes = 0;
-  if (state.screenTime.logs === undefined) state.screenTime.logs = {};
   // Backfill: older story items were created before "date" existed — assign
   // them their creation date so they still show up in the right day column
   // instead of vanishing from the new per-day Story view.
   state.storyVault.items.forEach(it => { if (!it.date) it.date = dateToISO(new Date(it.createdAt)); });
   notesState = notes || seedNotes();
   appMeta = meta || { lastBackupAt: null };
+  // Google Drive sync was removed from the app — if this device had been
+  // connected before, clear that stale flag (and the cached file id/token
+  // bookkeeping) so nothing tries to pick it back up later.
+  if (appMeta.gDriveConnected || appMeta.gDriveFileId) {
+    appMeta.gDriveConnected = false;
+    appMeta.gDriveFileId = null;
+    saveMeta();
+  }
   checkStreakRollover(todayISO());
 
   const today = todayISO();
@@ -8906,7 +7722,6 @@ async function init(){
   bindEventsOnce();
   applyTabAccent(activeTab);
   await tryRestoreSyncHandle();
-  tryRestoreGoogleDrive(); // fire-and-forget — never blocks first paint
 
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
