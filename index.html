@@ -991,6 +991,14 @@ let storageWarned = false;
 let dataLoadWarning = false;
 let dataLoadRetryInProgress = false;
 let appMeta = { lastBackupAt: null };
+// Best-effort "when was real data on THIS device last touched" — bumped on
+// every genuine field save (never on 'meta'). Lets an import warn when the
+// backup being pasted in is actually OLDER than what's already here, which
+// is exactly how "says imported, but nothing changed" happens silently: the
+// pasted JSON is stale (e.g. the clipboard still held an old copy), passes
+// validation fine, and overwrites current data with itself or with older
+// values — a real change in theory but invisible in practice.
+let lastLocalChangeAt = Date.now();
 let pendingSaves = {};      // key -> JSON payload not yet confirmed saved
 let storageRetryTimer = null;
 function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
@@ -1163,6 +1171,7 @@ async function saveKey(key, value){
   // overwriting it — the root of "always copies from the computer").
   if (key !== 'meta') {
     scheduleSyncFileWrite();
+    lastLocalChangeAt = Date.now();
   }
   const stamped = { t: Date.now(), v: value };
 
@@ -1360,7 +1369,14 @@ function applyImportedData(parsed){
   const d = parsed && parsed.data ? parsed.data : parsed;
   if (!d || typeof d !== 'object' || (!d.goal && !d.leads && !d.checklist)) return false;
   state.goal = d.goal || state.goal;
-  state.checklist = d.checklist || state.checklist;
+  // Only trust an imported checklist if it actually has the shape every
+  // render() depends on (.categories, .checked) — a bare/partial/legacy
+  // object here used to crash the entire repaint inside renderNav() right
+  // after the rest of the import had already been saved, which is exactly
+  // how a real import could silently look like "says imported, but isn't".
+  if (d.checklist && typeof d.checklist === 'object' && d.checklist.categories && d.checklist.checked) {
+    state.checklist = d.checklist;
+  }
   state.calendar = d.calendar || state.calendar;
   state.leads = normalizeLeads(d.leads || state.leads);
   state.content = d.content || state.content;
@@ -1386,9 +1402,27 @@ function applyImportedData(parsed){
   if (d.notes) notesState = d.notes;
   undoStack = []; redoStack = [];
   closeDataOverlays();
-  saveAll(); saveNotes();
-  render();
-  renderOverlay();
+  // This import just became this device's current state — tell the local
+  // file-sync bookkeeping that too. Without this, the bookmark it uses to
+  // decide "is the synced file newer than what I have?" stays stuck at
+  // whatever it was before the import, so the very next auto-read-back
+  // (triggered by the window regaining focus right after this function's
+  // confirm() dialog closes, by the tab becoming visible again, or by the
+  // 90s poll) could find the OLD on-disk file still "newer" than that stale
+  // bookmark and silently pull it back in — undoing the import a moment
+  // after it succeeded, which looks exactly like "says imported, but isn't".
+  if (parsed && parsed.exportedAt) appMeta.syncFileLastAppliedAt = parsed.exportedAt;
+  saveAll(); saveNotes(); saveMeta();
+  // The data is already fully saved at this point — everything from here on
+  // is just repainting the screen. If a repaint throws (a shape we didn't
+  // anticipate, a one-off rendering bug), it must NOT make this function
+  // throw back out to the caller: that would skip the success toast and
+  // closeSync() in the three import entry points, and — worse — land in
+  // their generic catch block, which would then blame the clipboard or the
+  // file for a problem that was actually in rendering, after the real data
+  // had already imported correctly.
+  try { render(); renderOverlay(); }
+  catch(e){ console.warn('Import succeeded but the repaint failed — reloading will show it correctly.', e); }
   return true;
 }
 function saveMeta(){ saveKey('meta', appMeta); }
@@ -1460,17 +1494,72 @@ function tryParseImportJson(rawText){
   }
   return null;
 }
+// A paste/import that technically "succeeds" but changes nothing looks
+// exactly like a bug — to the person it IS a bug, even if the cause is a
+// stale clipboard or an old note. These two helpers make that impossible to
+// miss: the confirm dialog shows what's actually about to be imported (date
+// + lead count) and flags it when it's older than what's already on this
+// device, and the success toast repeats those numbers so "imported" always
+// comes with proof of what changed.
+function formatRoDateTime(iso){
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString('ro-RO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch(e){ return null; }
+}
+function describeImportPayload(parsed){
+  const d = parsed && parsed.data ? parsed.data : parsed;
+  const exportedAt = parsed && parsed.exportedAt ? parsed.exportedAt : null;
+  const leadsCount = (d && Array.isArray(d.leads)) ? d.leads.length : null;
+  const exportedMs = exportedAt ? new Date(exportedAt).getTime() : NaN;
+  const isStale = !isNaN(exportedMs) && exportedMs < lastLocalChangeAt;
+  return { exportedAt, when: exportedAt ? formatRoDateTime(exportedAt) : null, leadsCount, isStale };
+}
+function buildImportConfirmMessage(parsed){
+  const info = describeImportPayload(parsed);
+  const lines = ['Sigur vrei să înlocuiești toate datele curente cu acest backup? Datele curente se pierd.'];
+  if (info.when) lines.push('Backup din: ' + info.when + '.');
+  else lines.push('Acest backup nu are o dată de export — nu pot verifica cât de vechi e.');
+  if (info.leadsCount !== null) lines.push('Conține ' + info.leadsCount + ' lead' + (info.leadsCount === 1 ? '' : '-uri') + '.');
+  if (info.isStale) lines.push('⚠️ Acest backup pare MAI VECHI decât datele deja prezente pe acest dispozitiv — s-ar putea să se schimbe foarte puțin sau nimic.');
+  return lines.join('\n');
+}
+function buildImportSuccessToast(parsed, fallback){
+  const info = describeImportPayload(parsed);
+  const extra = [];
+  if (info.when) extra.push('din ' + info.when);
+  if (info.leadsCount !== null) extra.push(info.leadsCount + ' lead-uri');
+  return extra.length ? (fallback + ' (' + extra.join(', ') + ')') : fallback;
+}
+// Shared by all three import entry points below. Runs applyImportedData()
+// with its own try/catch so a problem there (now mainly a defensive
+// backstop — applyImportedData itself no longer lets a repaint failure
+// escape) is reported honestly as an import problem, never folded into an
+// unrelated error from an earlier step (e.g. a clipboard-read failure) in
+// the caller's own try/catch. That mislabeling is exactly how a real
+// failure could end up invisible or mis-blamed on the wrong step.
+function runImportAndReport(parsed, successLabel, onDone){
+  let ok = false;
+  try { ok = applyImportedData(parsed); }
+  catch(e){
+    console.warn('Import failed unexpectedly', e);
+    toast('A apărut o problemă la import — datele curente nu au fost modificate', 'error');
+    return;
+  }
+  toast(ok ? buildImportSuccessToast(parsed, successLabel) : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
+  if (ok && onDone) onDone();
+}
 async function pasteDataFromClipboard(){
+  let text;
   try {
     if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea automată din clipboard aici — folosește "Lipește din text" mai jos.', 'error'); return; }
-    const text = await navigator.clipboard.readText();
-    const parsed = tryParseImportJson(text);
-    if (!parsed) { toast('Ce e în clipboard nu e un JSON valid — încearcă "Lipește din text" mai jos', 'error'); return; }
-    if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite din clipboard? Datele curente se pierd.')) return;
-    const ok = applyImportedData(parsed);
-    toast(ok ? 'Date importate din clipboard' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
-    if (ok) closeSync();
-  } catch(e){ toast('Nu am putut citi automat din clipboard — folosește "Lipește din text" mai jos', 'error'); }
+    text = await navigator.clipboard.readText();
+  } catch(e){ toast('Nu am putut citi automat din clipboard — folosește "Lipește din text" mai jos', 'error'); return; }
+  const parsed = tryParseImportJson(text);
+  if (!parsed) { toast('Ce e în clipboard nu e un JSON valid — încearcă "Lipește din text" mai jos', 'error'); return; }
+  if (!confirm(buildImportConfirmMessage(parsed))) return;
+  runImportAndReport(parsed, 'Date importate din clipboard', closeSync);
 }
 function importDataFromManualText(){
   const ta = document.getElementById('manual-import-text');
@@ -1478,10 +1567,8 @@ function importDataFromManualText(){
   if (!raw || !raw.trim()) { toast('Lipește mai întâi textul în casetă', 'error'); return; }
   const parsed = tryParseImportJson(raw);
   if (!parsed) { toast('Textul lipit nu e un JSON valid', 'error'); return; }
-  if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele lipite? Datele curente se pierd.')) return;
-  const ok = applyImportedData(parsed);
-  toast(ok ? 'Date importate' : 'Structura JSON nu e cea așteptată', ok ? undefined : 'error');
-  if (ok) { if (ta) ta.value = ''; closeSync(); }
+  if (!confirm(buildImportConfirmMessage(parsed))) return;
+  runImportAndReport(parsed, 'Date importate', () => { if (ta) ta.value = ''; closeSync(); });
 }
 function triggerImport(){ document.getElementById('import-file-input').click(); }
 function handleImportFile(file){
@@ -1489,10 +1576,8 @@ function handleImportFile(file){
   reader.onload = () => {
     const parsed = tryParseImportJson(reader.result);
     if (!parsed || typeof parsed !== 'object') { toast('Fișierul nu e un JSON valid', 'error'); return; }
-    if (!confirm('Sigur vrei să înlocuiești toate datele curente cu cele din acest backup? Datele curente se pierd.')) return;
-    const ok = applyImportedData(parsed);
-    toast(ok ? 'Backup importat cu succes' : 'Fișierul nu are structura așteptată', ok ? undefined : 'error');
-    if (ok) closeSync();
+    if (!confirm(buildImportConfirmMessage(parsed))) return;
+    runImportAndReport(parsed, 'Backup importat cu succes', closeSync);
   };
   reader.onerror = () => toast('Nu am putut citi fișierul', 'error');
   reader.readAsText(file);
@@ -1766,16 +1851,26 @@ function normalizeLeads(leads){
   }));
 }
 function allChecklistIds(){
+  // Defensive: state.checklist is sometimes replaced wholesale (import from
+  // another device, a future schema change, corrupted storage) by something
+  // that doesn't have .categories/.checked yet. Without these fallbacks,
+  // Object.keys(undefined) throws here — and since this runs inside every
+  // single render() via renderNav(), that one bad checklist shape doesn't
+  // just show empty stats, it crashes the ENTIRE repaint silently wherever
+  // it's called from (including mid-import), which looks exactly like
+  // "nothing happened" even though the rest of the data actually changed.
   const ids = [];
-  Object.keys(state.checklist.categories).forEach(cat => {
-    (state.checklist.categories[cat].tasks || []).forEach(t => ids.push(t.id));
+  const categories = (state.checklist && state.checklist.categories) || {};
+  Object.keys(categories).forEach(cat => {
+    ((categories[cat] && categories[cat].tasks) || []).forEach(t => ids.push(t.id));
   });
   return ids;
 }
 function computeChecklistStats(){
   const ids = allChecklistIds();
   const total = ids.length;
-  const done = ids.filter(id => state.checklist.checked[id]).length;
+  const checked = (state.checklist && state.checklist.checked) || {};
+  const done = ids.filter(id => checked[id]).length;
   return { total, done, pct: total ? Math.round(done/total*100) : 0 };
 }
 function computeGoalStats(){
