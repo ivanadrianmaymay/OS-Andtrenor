@@ -281,6 +281,21 @@
     .lead-card .status-pill{white-space:nowrap; flex-shrink:0; padding:6px 12px; min-height:32px; display:inline-flex; align-items:center;}
   }
 
+  /* "De făcut azi" + "Mai mult" */
+  .today-row{padding:11px 0; border-bottom:1px solid rgba(255,255,255,.06);}
+  .today-row:last-child{border-bottom:none; padding-bottom:2px;}
+  .today-name{background:none; border:none; padding:0; color:var(--text); font-size:14.5px; font-weight:600; text-align:left; min-width:0; overflow-wrap:anywhere;}
+  .today-clamp{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .more-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px;}
+  .more-tile{display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:14px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,.03); color:var(--text); text-align:left; font-size:14px; min-height:72px;}
+  .more-tile.active{border-color:var(--accent-border); background:var(--accent-soft);}
+  .more-tile-sub{font-size:11px; color:var(--text-mute);}
+  .add-lead-grid{grid-template-columns:1fr 1fr; gap:10px;}
+  .add-lead-wide{grid-column:1 / -1;}
+  @media(min-width:900px){ .add-lead-grid{grid-template-columns:2fr 1fr 1fr 1fr 1fr;} .add-lead-wide{grid-column:auto;} .add-lead-grid .add-lead-wide:last-child{grid-column:1 / -1;} }
+  .pc-only-inline{display:none;}
+  @media(min-width:768px){ .pc-only-inline{display:inline;} }
+
   /* Quick Desk */
   .qd-obj-card{background:rgba(0,0,0,.22); border:1px solid var(--line); border-radius:12px; padding:12px;}
 
@@ -328,7 +343,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v12</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v13</p>
       </div>
     </div>
   </aside>
@@ -371,7 +386,8 @@
 
 <div id="overlay-root"></div>
 <div id="filming-mode-root" class="hidden"></div>
-<input type="file" id="import-file-input" accept="application/json" class="hidden" />
+<input type="file" id="import-file-input" accept=".json,.txt,application/json,text/plain" class="hidden" />
+<div id="drop-hint-root"></div>
 <div id="toast-root"></div>
 
 <script>
@@ -458,6 +474,7 @@ const ICONS = {
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   flame: '<path d="M12 2c1 3-2 4-2 7a3 3 0 0 0 6 0c0-1-.5-2-.5-2 1.5 1 2.5 3 2.5 5a6 6 0 0 1-12 0c0-4 3-5 3-8 0-1-.3-2-.3-2S11 1 12 2z" fill="currentColor" stroke="none"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2"/>',
+  grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
 };
 
 function icon(name, size){
@@ -496,7 +513,7 @@ const STORY_ARCS = [
   { name: 'Autoritate',                         desc: 'O lecție tehnică scurtă care arată că știi despre ce vorbești' },
   { name: 'Dovadă Socială / Victorie Client',   desc: 'Un rezultat, un feedback sau un before/after real' },
   { name: 'Demontare Mituri',                   desc: 'Sparge un mit comun din fitness/nutriție' },
-  { name: 'Oferta Directă High-Ticket',         desc: 'Vorbește direct despre MASTERY — fără ocolișuri' },
+  { name: 'Oferta Directă High-Ticket',         desc: 'Vorbește direct despre M.A.I. Protocol — fără ocolișuri' },
   { name: 'Lifestyle',                          desc: 'Partea umană — o zi din viața ta, ceva relatable' },
   { name: 'Audit & Q&A',                        desc: 'Recapitulează săptămâna, răspunde la întrebări din DM' },
 ];
@@ -532,8 +549,8 @@ const STORY_DRAFTS = [
     trigger: ['Ai mai auzit mitul ăsta? Spune-mi în DM.', 'Întrebări? Sunt în DM, răspund la toate.'],
   },
   { // 4 — Oferta Directă High-Ticket
-    hook: ['Dacă tot amâni să începi, hai să vorbim direct azi.', 'MASTERY se deschide pentru un număr limitat de locuri — iată despre ce e vorba.', 'Ești pregătit să faci asta serios? Atunci citește până la capăt.'],
-    context: ['MASTERY e programul meu complet pentru bărbați 30+ care vor un plan real, nu încă un PDF gratuit.', 'Nu e un antrenament random — e un sistem complet, construit pe baza a sute de clienți reali.', 'Dacă ai încercat singur și nu a mers, poate exact asta îți lipsea.'],
+    hook: ['Dacă tot amâni să începi, hai să vorbim direct azi.', 'M.A.I. Protocol se deschide pentru un număr limitat de locuri — iată despre ce e vorba.', 'Ești pregătit să faci asta serios? Atunci citește până la capăt.'],
+    context: ['M.A.I. Protocol e programul meu complet pentru bărbați 30+ care vor un plan real, nu încă un PDF gratuit.', 'Nu e un antrenament random — e un sistem complet, bazat pe știință și adaptat programului tău real.', 'Dacă ai încercat singur și nu a mers, poate exact asta îți lipsea.'],
     tensiune: ['Fără un ghid clar și cineva care să te țină responsabil, e ușor să renunți la lună 2.', 'Cei mai mulți nu eșuează din lipsă de voință, ci din lipsă de plan și direcție.', 'Locurile sunt limitate pentru că lucrez atent, personalizat, cu fiecare client.'],
     trigger: [null], // filled dynamically with brand keyword/CTA below
   },
@@ -591,7 +608,7 @@ const SEED_IDEAS = {
     'Before/after: ce s-a schimbat de fapt în afara oglinzii (energie, somn, haine)',
     'Obstacolul real pe care l-a depășit un client (nu motivația — sistemul)',
     'De la "nu am timp" la antrenament de 4x/săptămână — povestea unui client ocupat',
-    'Ce spune un client după 90 de zile de MASTERY',
+    'Ce spune un client după 90 de zile de M.A.I. Protocol',
   ],
   mindset: [
     'De ce disciplina bate motivația de fiecare dată',
@@ -602,10 +619,10 @@ const SEED_IDEAS = {
   ],
   vanzare: [
     'De ce 90% din bărbații 30+ eșuează la dietă (și cum arată planul care chiar funcționează)',
-    'Ce primești concret în MASTERY — pe scurt, fără fițe',
+    'Ce primești concret în M.A.I. Protocol — pe scurt, fără fițe',
     'Diferența dintre un plan generic de pe internet și coaching 1-la-1',
     '3 semne că ai nevoie de un antrenor, nu de încă un PDF gratuit',
-    'Locurile pentru MASTERY sunt limitate — iată de ce contează',
+    'Locurile pentru M.A.I. Protocol sunt limitate — iată de ce contează',
   ],
 };
 
@@ -623,8 +640,8 @@ const SEED_SCRIPTS = {
     { hook: 'Ce fac în ziua în care nu am niciun chef de antrenament', body: 'Descrie pas cu pas ritualul tău minim (regula celor 10 minute, pregătirea din seara anterioară etc). Normalizează lipsa de motivație ca fiind parte din proces.', cta: 'Salvează asta pentru următoarea zi grea.' },
   ],
   vanzare: [
-    { hook: 'De ce 90% din bărbații 30+ eșuează la dietă (și cum arată planul care chiar funcționează)', body: 'Prezintă pe scurt structura MASTERY: check-in-uri, ajustări constante, plan personalizat. Elimină o obiecție comună (timp sau preț) într-o singură frază directă.', cta: 'Scrie-mi START în DM pentru un apel gratuit de clarificare.' },
-    { hook: '3 semne că ai nevoie de un antrenor, nu de încă un PDF gratuit', body: 'Listează 3 semne concrete și relatable. Poziționează coaching-ul 1-la-1 ca diferența dintre informație și implementare.', cta: 'Locurile din MASTERY sunt limitate luna asta — scrie-mi START.' },
+    { hook: 'De ce 90% din bărbații 30+ eșuează la dietă (și cum arată planul care chiar funcționează)', body: 'Prezintă pe scurt structura M.A.I. Protocol: check-in-uri, ajustări constante, plan personalizat. Elimină o obiecție comună (timp sau preț) într-o singură frază directă.', cta: 'Scrie-mi START în DM pentru un apel gratuit de clarificare.' },
+    { hook: '3 semne că ai nevoie de un antrenor, nu de încă un PDF gratuit', body: 'Listează 3 semne concrete și relatable. Poziționează coaching-ul 1-la-1 ca diferența dintre informație și implementare.', cta: 'Locurile din M.A.I. Protocol sunt limitate luna asta — scrie-mi START.' },
   ],
 };
 
@@ -703,6 +720,16 @@ function isActiveClient(lead){
   // they renew, which understates every money figure on the app.
   return lead.status === 'Închis' || lead.status === 'Retain';
 }
+// Where a lead came from. Only "DM" and "Formular" existed, so a lead from
+// TikTok or a recommendation could only be filed under the wrong source. A
+// value that isn't in this list (older data, an import) is kept and shown
+// as its own option instead of silently turning into "DM".
+const LEAD_SOURCES = ['DM', 'TikTok', 'Comentariu / Reel', 'Formular', 'Recomandare', 'Altă sursă'];
+function leadSourceOptionsHtml(current){
+  const cur = current || 'DM';
+  const list = LEAD_SOURCES.includes(cur) ? LEAD_SOURCES : LEAD_SOURCES.concat([cur]);
+  return list.map(v => '<option value="'+escapeAttr(v)+'" '+(v===cur?'selected':'')+'>'+escapeHtml(v === 'DM' ? 'DM Instagram' : v)+'</option>').join('');
+}
 const LEAD_STATUS_COLORS = {
   'Contactat': '#9CA3AF', 'Formular trimis': '#60A5FA', 'Apel programat': '#FBBF24',
   'Închis': '#34D399', 'Retain': '#C084FC',
@@ -710,7 +737,7 @@ const LEAD_STATUS_COLORS = {
 
 const DEFAULT_QUALIFY_FIELDS = {
   budget:     { label: 'Buget',       emptyPts: 0, options: [{v:'disponibil',l:'Disponibil',pts:25},{v:'limitat',l:'Limitat',pts:0}] },
-  urgency:    { label: 'Urgență',     emptyPts: 0, options: [{v:'azi',l:'Vrea să înceapă AZI',pts:25},{v:'tortureaza',l:'Doar tortează',pts:0}] },
+  urgency:    { label: 'Urgență',     emptyPts: 0, options: [{v:'azi',l:'Vrea să înceapă AZI',pts:25},{v:'tortureaza',l:'Doar tatonează',pts:0}] },
   profile:    { label: 'Profil',      emptyPts: 0, options: [{v:'profesionist',l:'Profesionist ocupat 30+',pts:25},{v:'student',l:'Student / neexperimentat',pts:0}] },
   experience: { label: 'Experiență',  emptyPts: 0, options: [{v:'cu_antrenor',l:'A mai lucrat cu antrenor',pts:25},{v:'incepator',l:'Începător',pts:0}] },
 };
@@ -723,6 +750,11 @@ const DISCOVERY_STEPS = [
   { k: 'obiectie', label: 'Obiecție principală', hint: 'Care e frâna reală (preț, timp, încredere)' },
   { k: 'inchidere', label: 'Închidere', hint: 'Ai propus oferta și ai cerut decizia clar' },
 ];
+function fixQualifyLabelTypos(){
+  Object.keys(QUALIFY_FIELDS).forEach(k => {
+    ((QUALIFY_FIELDS[k] && QUALIFY_FIELDS[k].options) || []).forEach(o => { if (o.l === 'Doar tortează') o.l = 'Doar tatonează'; });
+  });
+}
 function computeLeadScore(lead){
   const q = lead.qualify || {};
   let score = 0;
@@ -749,7 +781,7 @@ const SEED_TEMPLATES = {
   dm2: { group: 'dm', title: 'Deschidere — reacție la story', text: 'Mersi că ai reacționat la story! Ce anume te-a atras — partea de nutriție sau cea de antrenament? Îți pot trimite un mic ghid gratuit dacă vrei să începi de acolo.' },
   fu1: { group: 'followup', title: 'Lead rece — fără răspuns 48h', text: 'Salut [Nume], nicio grabă 🙂 Rămân pe aproape dacă vrei să discutăm despre cum poți ajunge la [obiectiv]. Dacă vrei, îți trimit un rezumat scurt, de 2 minute citit.' },
   fu2: { group: 'followup', title: 'Follow-up post-apel (nu a închis)', text: 'Salut [Nume], mersi pentru timpul acordat azi! Ți-am lăsat pe pagina privată tot ce am discutat, ca să ai totul negru pe alb: ivanadrian.fit/mastery. Rămân aici pentru orice întrebare.' },
-  ob_pret: { group: 'obiectii', title: 'Obiecție: PREȚ', text: 'Înțeleg perfect, e o investiție. Hai să o punem în context: MASTERY ajunge la mai puțin de X €/zi — cam cât un covrig cu cafea — dar diferența e că peste 12 luni vei fi într-un corp complet diferit, cu un sistem clar în loc de încercare-eroare. Care crezi că e costul real al încă unui an fără un plan care funcționează?' },
+  ob_pret: { group: 'obiectii', title: 'Obiecție: PREȚ', text: 'Înțeleg perfect, e o investiție. Hai să o punem în context: M.A.I. Protocol ajunge la mai puțin de X €/zi — cam cât un covrig cu cafea — dar diferența e că peste 12 luni vei fi într-un corp complet diferit, cu un sistem clar în loc de încercare-eroare. Care crezi că e costul real al încă unui an fără un plan care funcționează?' },
   ob_timp: { group: 'obiectii', title: 'Obiecție: TIMP', text: 'Te înțeleg, toți suntem ocupați. De asta programul e construit pentru oameni cu job full-time — antrenamentele durează 45-50 min, de 3-4 ori pe săptămână, iar eu ajustez totul în funcție de agenda ta reală. Nu ai nevoie de mai mult timp liber, ai nevoie de un sistem care se pliază pe timpul pe care îl ai deja.' },
   ob_gandesc: { group: 'obiectii', title: 'Obiecție: "Mă mai gândesc"', text: 'Perfect, e o decizie importantă. Ca să te ajut să te gândești clar: ce anume te reține — bugetul, încrederea că vei reuși, sau faptul că nu ești sigur că e momentul potrivit? Hai să vorbim punctual despre exact partea aia.' },
   ob_incredere: { group: 'obiectii', title: 'Obiecție: Încredere / "nu știu dacă voi reuși"', text: 'Normal să simți asta, aproape toți clienții mei au pornit din același loc. De asta programul nu se bazează pe motivație — se bazează pe check-in-uri săptămânale, ajustări constante și un sistem care te ține pe drum chiar și în zilele proaste. Nu ești singur în asta.' },
@@ -772,6 +804,31 @@ function seedChecklistCategories(){
     out[cat] = { label: SEED_CHECKLIST[cat].label, tasks: SEED_CHECKLIST[cat].tasks.map(label => ({ id: uid(), label })) };
   });
   return out;
+}
+// One-off tasks the app adds by itself (send onboarding to X, renewal call
+// for Y, plan Stories for a post) used to be pushed into the checklist as if
+// they were permanent daily habits — so each one came back every single day
+// forever, until deleted by hand. They're now flagged oneOff: they stay on
+// the list until ticked, and a ticked one is dropped at the next day change.
+// The label prefixes also catch the ones created before this flag existed.
+const ONE_OFF_TASK_PREFIXES = [
+  'Trimite onboarding, chestionar inițial & invitație Everfit — ',
+  'Apel retenție / re-semnare pachet — ',
+  'Planifică 3-4 Stories pentru: ',
+];
+function carryOverChecklistCategories(prev){
+  const cats = prev && prev.categories;
+  if (!cats || typeof cats !== 'object') return seedChecklistCategories();
+  const checked = (prev && prev.checked) || {};
+  Object.keys(cats).forEach(k => {
+    const c = cats[k];
+    if (!c || !Array.isArray(c.tasks)) return;
+    c.tasks.forEach(t => {
+      if (!t.oneOff && ONE_OFF_TASK_PREFIXES.some(p => String(t.label || '').indexOf(p) === 0)) t.oneOff = true;
+    });
+    c.tasks = c.tasks.filter(t => !(t.oneOff && checked[t.id]));
+  });
+  return cats;
 }
 function seedIdeas(){
   const out = {};
@@ -998,7 +1055,13 @@ let appMeta = { lastBackupAt: null };
 // pasted JSON is stale (e.g. the clipboard still held an old copy), passes
 // validation fine, and overwrites current data with itself or with older
 // values — a real change in theory but invisible in practice.
-let lastLocalChangeAt = Date.now();
+let lastLocalChangeAt = 0;
+// Keys whose saves are routine housekeeping (the daily checklist reset, the
+// streak/XP counters, sync bookkeeping) — they must not count as "this
+// device has newer data", or opening the app on a new day would make every
+// backup from another device look outdated.
+const HOUSEKEEPING_KEYS = { meta: 1, checklist: 1, streak: 1, gamification: 1 };
+const CHANGE_TRACKED_KEYS = ['goal','calendar','leads','content','resources','activity','notes','links','trackedAccounts','savedLinks','testimonials','shotList','brand','storyVault','ads','settings'];
 let pendingSaves = {};      // key -> JSON payload not yet confirmed saved
 let storageRetryTimer = null;
 function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
@@ -1144,6 +1207,7 @@ function applyRecoveredKey(key, value){
     goal:'goal', calendar:'calendar', leads:'leads', content:'content', resources:'resources',
     activity:'activity', links:'links', trackedAccounts:'trackedAccounts', streak:'streak', ads:'ads', testimonials:'testimonials',
     shotList:'shotList', brand:'brand', gamification:'gamification', storyVault:'storyVault',
+    savedLinks:'savedLinks', navOrder:'navOrder', settings:'settings',
   };
   if (key === 'leads') { state.leads = normalizeLeads(value); return; }
   if (key === 'notes') { notesState = value; return; }
@@ -1171,7 +1235,7 @@ async function saveKey(key, value){
   // overwriting it — the root of "always copies from the computer").
   if (key !== 'meta') {
     scheduleSyncFileWrite();
-    lastLocalChangeAt = Date.now();
+    if (!HOUSEKEEPING_KEYS[key]) lastLocalChangeAt = Date.now();
   }
   const stamped = { t: Date.now(), v: value };
 
@@ -1271,7 +1335,7 @@ function snapshotState(){
   return JSON.parse(JSON.stringify({
     goal: state.goal, checklist: state.checklist, calendar: state.calendar,
     leads: state.leads, content: state.content, resources: state.resources, activity: state.activity,
-    links: state.links, trackedAccounts: state.trackedAccounts, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
+    links: state.links, trackedAccounts: state.trackedAccounts, savedLinks: state.savedLinks, streak: state.streak, ads: state.ads, testimonials: state.testimonials, shotList: state.shotList,
     brand: state.brand, gamification: state.gamification, storyVault: state.storyVault,
   }));
 }
@@ -1280,6 +1344,7 @@ function applySnapshot(snap){
   state.leads = snap.leads; state.content = snap.content; state.resources = snap.resources; state.activity = snap.activity;
   state.links = snap.links || [];
   state.trackedAccounts = snap.trackedAccounts || [];
+  if (snap.savedLinks) state.savedLinks = snap.savedLinks;
   state.streak = snap.streak || { count: 0, lastCompletedDate: null };
   state.ads = snap.ads || { monthlyBudget: 0 };
   state.testimonials = snap.testimonials || [];
@@ -1375,7 +1440,12 @@ function applyImportedData(parsed){
   // after the rest of the import had already been saved, which is exactly
   // how a real import could silently look like "says imported, but isn't".
   if (d.checklist && typeof d.checklist === 'object' && d.checklist.categories && d.checklist.checked) {
-    state.checklist = d.checklist;
+    // A checklist exported on another day carries THAT day's ticks — taking
+    // it as-is made today look already done. Keep the task list, start the
+    // day clean (same thing the app does by itself at midnight).
+    state.checklist = d.checklist.date === todayISO()
+      ? d.checklist
+      : { date: todayISO(), checked: {}, categories: carryOverChecklistCategories(d.checklist) };
   }
   state.calendar = d.calendar || state.calendar;
   state.leads = normalizeLeads(d.leads || state.leads);
@@ -1390,6 +1460,7 @@ function applyImportedData(parsed){
   if (d.qualifyConfig) {
     QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
     Object.keys(d.qualifyConfig).forEach(k => { QUALIFY_FIELDS[k] = d.qualifyConfig[k]; });
+    fixQualifyLabelTypos();
     saveKey('qualifyConfig', QUALIFY_FIELDS);
   }
   state.streak = d.streak || state.streak;
@@ -1412,7 +1483,18 @@ function applyImportedData(parsed){
   // bookmark and silently pull it back in — undoing the import a moment
   // after it succeeded, which looks exactly like "says imported, but isn't".
   if (parsed && parsed.exportedAt) appMeta.syncFileLastAppliedAt = parsed.exportedAt;
-  saveAll(); saveNotes(); saveMeta();
+  saveAll(); saveNotes();
+  // Writing the imported data stamps every key with "now", but the data
+  // itself is only as fresh as the backup it came from. Remember that, so
+  // importing the same (or a slightly newer) backup later isn't flagged as
+  // "older than your changes here" when nothing was changed here at all.
+  const importedAsOf = parsed && parsed.exportedAt ? new Date(parsed.exportedAt).getTime() : NaN;
+  if (!isNaN(importedAsOf)) {
+    appMeta.importedStampAt = Date.now();
+    appMeta.importedDataAsOf = parsed.exportedAt;
+    lastLocalChangeAt = importedAsOf;
+  }
+  saveMeta();
   // The data is already fully saved at this point — everything from here on
   // is just repainting the screen. If a repaint throws (a shape we didn't
   // anticipate, a one-off rendering bug), it must NOT make this function
@@ -1460,7 +1542,7 @@ function copyDataToClipboard(){
 let manualCopyText = null;
 function copyToClipboardOrShow(text){
   const done = () => { manualCopyText = null; toast('Copiat în clipboard'); if (syncOpen) renderOverlay(); };
-  const fail = () => { manualCopyText = text; toast('Nu am putut copia automat — textul e mai jos, selectează tot și copiază manual', 'error'); if (syncOpen) renderOverlay(); };
+  const fail = () => { manualCopyText = text; syncAdvancedOpen = true; toast('Nu am putut copia automat — textul e mai jos, selectează tot și copiază manual', 'error'); if (syncOpen) renderOverlay(); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done, fail));
   } else { fallbackCopy(text, done, fail); }
@@ -1521,8 +1603,9 @@ function buildImportConfirmMessage(parsed){
   const lines = ['Sigur vrei să înlocuiești toate datele curente cu acest backup? Datele curente se pierd.'];
   if (info.when) lines.push('Backup din: ' + info.when + '.');
   else lines.push('Acest backup nu are o dată de export — nu pot verifica cât de vechi e.');
-  if (info.leadsCount !== null) lines.push('Conține ' + info.leadsCount + ' lead' + (info.leadsCount === 1 ? '' : '-uri') + '.');
-  if (info.isStale) lines.push('⚠️ Acest backup pare MAI VECHI decât datele deja prezente pe acest dispozitiv — s-ar putea să se schimbe foarte puțin sau nimic.');
+  if (info.leadsCount !== null) lines.push('Conține ' + info.leadsCount + ' lead' + (info.leadsCount === 1 ? '' : '-uri') + ' (acum ai ' + state.leads.length + ' pe acest dispozitiv).');
+  if (info.isStale) lines.push('⚠️ Acest backup pare MAI VECHI decât ultimele modificări făcute pe acest dispozitiv — ai putea pierde ce ai lucrat aici după acea dată.');
+  lines.push('Dacă te răzgândești, poți reveni: Sync → „Anulează ultimul import".');
   return lines.join('\n');
 }
 function buildImportSuccessToast(parsed, fallback){
@@ -1539,8 +1622,38 @@ function buildImportSuccessToast(parsed, fallback){
 // unrelated error from an earlier step (e.g. a clipboard-read failure) in
 // the caller's own try/catch. That mislabeling is exactly how a real
 // failure could end up invisible or mis-blamed on the wrong step.
+// Safety net for manual imports: just before the current data is replaced,
+// a full copy of it is parked in IndexedDB (not localStorage — photos make
+// it too big for that). One tap in the Sync panel brings it back. It's
+// stored as a JSON string so later edits can't reach into it.
+const PRE_IMPORT_KEY = '__preImportSnapshot';
+function savePreImportSnapshot(){
+  try {
+    const text = JSON.stringify(buildExportPayload());
+    appMeta.preImportAt = new Date().toISOString();
+    idbSet(PRE_IMPORT_KEY, { t: Date.now(), v: text });
+  } catch(e){ console.warn('Could not save the pre-import snapshot', e); }
+}
+async function restorePreImportSnapshot(){
+  const snap = await idbGet(PRE_IMPORT_KEY);
+  if (!snap || !snap.v) { toast('Nu am găsit o copie dinaintea importului pe acest dispozitiv', 'error'); appMeta.preImportAt = null; saveMeta(); if (syncOpen) renderOverlay(); return; }
+  let parsed = null;
+  try { parsed = JSON.parse(snap.v); } catch(e){ parsed = null; }
+  if (!parsed) { toast('Copia dinaintea importului nu a putut fi citită', 'error'); return; }
+  if (!confirm('Revii la datele de dinaintea ultimului import (salvate ' + (formatRoDateTime(appMeta.preImportAt) || 'atunci') + ')? Ce ai adus prin import se înlocuiește.')) return;
+  let ok = false;
+  try { ok = applyImportedData(parsed); } catch(e){ ok = false; }
+  if (!ok) { toast('Nu am putut restaura copia', 'error'); return; }
+  appMeta.preImportAt = null;
+  saveMeta();
+  idbDelete(PRE_IMPORT_KEY);
+  if (syncOpen) renderOverlay();
+  toast('Am revenit la datele de dinaintea importului');
+}
 function runImportAndReport(parsed, successLabel, onDone){
   let ok = false;
+  const incoming = parsed && parsed.data ? parsed.data : parsed;
+  if (incoming && typeof incoming === 'object' && (incoming.goal || incoming.leads || incoming.checklist)) savePreImportSnapshot();
   try { ok = applyImportedData(parsed); }
   catch(e){
     console.warn('Import failed unexpectedly', e);
@@ -1553,11 +1666,11 @@ function runImportAndReport(parsed, successLabel, onDone){
 async function pasteDataFromClipboard(){
   let text;
   try {
-    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea automată din clipboard aici — folosește "Lipește din text" mai jos.', 'error'); return; }
+    if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Browserul nu permite citirea automată din clipboard aici — lipește textul în caseta de mai sus.', 'error'); return; }
     text = await navigator.clipboard.readText();
-  } catch(e){ toast('Nu am putut citi automat din clipboard — folosește "Lipește din text" mai jos', 'error'); return; }
+  } catch(e){ toast('Nu am putut citi automat din clipboard — lipește textul în caseta de mai sus', 'error'); return; }
   const parsed = tryParseImportJson(text);
-  if (!parsed) { toast('Ce e în clipboard nu e un JSON valid — încearcă "Lipește din text" mai jos', 'error'); return; }
+  if (!parsed) { toast('Ce e în clipboard nu e un backup valid — mai sigur: trimite fișierul', 'error'); return; }
   if (!confirm(buildImportConfirmMessage(parsed))) return;
   runImportAndReport(parsed, 'Date importate din clipboard', closeSync);
 }
@@ -1571,6 +1684,74 @@ function importDataFromManualText(){
   runImportAndReport(parsed, 'Date importate', () => { if (ta) ta.value = ''; closeSync(); });
 }
 function triggerImport(){ document.getElementById('import-file-input').click(); }
+// Phone → computer without the clipboard: the phone's own share sheet sends
+// the backup as a real file (WhatsApp to yourself, Drive, e-mail, Quick
+// Share…). Browsers only allow a short list of file types through the share
+// sheet and .json isn't on it, so the file goes out as .txt — same content,
+// and "Alege fișierul primit" accepts both. Where sharing files isn't
+// available (desktop browsers mostly), it simply downloads the file.
+function backupFileName(ext){ return 'os-antrenor-backup-' + todayISO() + '.' + ext; }
+function isPhoneOrTablet(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && window.innerWidth < 900);
+}
+function canShareBackupFile(){
+  try {
+    // Desktop Chrome/Edge can technically "share" files too, but that opens
+    // the Windows share box — far less useful there than a plain download.
+    if (!isPhoneOrTablet()) return false;
+    if (!navigator.share || !navigator.canShare || typeof File === 'undefined') return false;
+    return navigator.canShare({ files: [new File(['{}'], backupFileName('txt'), { type: 'text/plain' })] });
+  } catch(e){ return false; }
+}
+async function shareBackupFile(){
+  const text = JSON.stringify(buildExportPayload());
+  if (canShareBackupFile()) {
+    try {
+      const file = new File([text], backupFileName('txt'), { type: 'text/plain' });
+      await navigator.share({ files: [file], title: 'OS Antrenor — backup' });
+      markBackedUp();
+      toast('Fișier trimis — deschide-l pe celălalt dispozitiv cu „Alege fișierul primit"');
+      return;
+    } catch(e){
+      if (e && e.name === 'AbortError') return; // closed the share sheet — nothing to do
+      console.warn('Share failed, falling back to download', e);
+    }
+  }
+  exportData();
+}
+// Desktop: drop the received backup file anywhere on the app to import it.
+let dragDepth = 0;
+function dragHasFiles(e){
+  const types = e.dataTransfer && e.dataTransfer.types;
+  if (!types) return false;
+  for (let i = 0; i < types.length; i++) { if (types[i] === 'Files') return true; }
+  return false;
+}
+function renderDropHint(show){
+  const root = document.getElementById('drop-hint-root');
+  if (!root) return;
+  root.innerHTML = show
+    ? '<div style="position:fixed; inset:0; z-index:200; background:rgba(10,10,10,.82); display:flex; align-items:center; justify-content:center; pointer-events:none;">' +
+        '<div style="border:2px dashed var(--accent); border-radius:18px; padding:34px 44px; text-align:center;">' +
+          '<p class="h2" style="margin-bottom:6px;">Lasă fișierul aici</p>' +
+          '<p class="text-sm muted">Backup OS Antrenor (.json sau .txt) — îți arăt ce conține înainte să înlocuiesc ceva.</p>' +
+        '</div>' +
+      '</div>'
+    : '';
+}
+function onDragEnter(e){ if (!dragHasFiles(e)) return; e.preventDefault(); dragDepth++; renderDropHint(true); }
+function onDragOver(e){ if (!dragHasFiles(e)) return; e.preventDefault(); }
+function onDragLeave(e){ if (!dragHasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) renderDropHint(false); }
+function onDrop(e){
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  renderDropHint(false);
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  if (!/\.(json|txt)$/i.test(file.name || '')) { toast('Trage aici fișierul de backup (.json sau .txt)', 'error'); return; }
+  handleImportFile(file);
+}
 function handleImportFile(file){
   const reader = new FileReader();
   reader.onload = () => {
@@ -1582,8 +1763,9 @@ function handleImportFile(file){
   reader.onerror = () => toast('Nu am putut citi fișierul', 'error');
   reader.readAsText(file);
 }
+let syncAdvancedOpen = false;
 function openSync(){ syncOpen = true; renderOverlay(); flushPendingSaves(); }
-function closeSync(){ syncOpen = false; manualCopyText = null; renderOverlay(); }
+function closeSync(){ syncOpen = false; manualCopyText = null; syncAdvancedOpen = false; renderOverlay(); }
 
 /* =========================================================
    AUTO-SYNC TO A LOCAL FILE (File System Access API)
@@ -1787,7 +1969,7 @@ function stopSyncFilePolling(){
   if (syncFilePollTimer) { clearInterval(syncFilePollTimer); syncFilePollTimer = null; }
 }
 async function chooseSyncFile(){
-  if (!isFileSystemAccessSupported()) { toast('Nedisponibil în acest browser — folosește Export sau Copiază mai jos', 'error'); return; }
+  if (!isFileSystemAccessSupported()) { toast('Nedisponibil în acest browser — folosește „Descarcă fișierul"', 'error'); return; }
   try {
     const handle = await window.showSaveFilePicker({
       suggestedName: 'os-antrenor-sync.json',
@@ -1937,14 +2119,14 @@ function computeSmartAlerts(){
   if (staleLeads.length) alerts.push({ level: 'warn', text: staleLeads.length + ' lead-uri nu au mai fost atinse de peste 3 zile', tab: 'crm' });
 
   const urgent = computeUrgentLeads();
-  if (urgent.length) alerts.push({ level: 'danger', text: urgent.length + ' lead-uri au follow-up programat azi sau mai devreme', tab: 'crm' });
+  if (urgent.length) alerts.push({ level: 'danger', kind: 'urgent', text: urgent.length + ' lead-uri au follow-up programat azi sau mai devreme', tab: 'crm' });
 
   const twoDaysAgo = new Date(now.getTime() - 2*24*60*60*1000);
   const recentPosted = state.calendar.posts.filter(p => p.status === 'postat' && new Date(p.date + 'T12:00:00') >= twoDaysAgo);
   if (!recentPosted.length) alerts.push({ level: 'warn', text: 'Nicio postare marcată "Postat" în ultimele 2 zile', tab: 'calendar' });
 
   const cs = computeChecklistStats();
-  if (now.getHours() >= 18 && cs.pct < 100) alerts.push({ level: 'warn', text: 'Checklist-ul zilei nu e terminat ('+cs.pct+'%)', tab: 'checklist' });
+  if (now.getHours() >= 18 && cs.pct < 100) alerts.push({ level: 'warn', kind: 'checklist', text: 'Checklist-ul zilei nu e terminat ('+cs.pct+'%)', tab: 'checklist' });
 
   const outstanding = computeOutstandingBalance();
   if (outstanding > 0) alerts.push({ level: 'info', text: formatEUR(outstanding) + ' de încasat de la clienți cu rate restante', tab: 'crm' });
@@ -2322,7 +2504,7 @@ function convertVictoryToStory(leadId){
     steps: [
       { key: 'hook', label: 'Hook', text: 'Rezultatul lui ' + lead.name + ' chiar merită arătat 👇' },
       { key: 'context', label: 'Context', text: pickDraft(d.context) },
-      { key: 'tensiune', label: 'Tensiune / Dovadă', text: (lead.value ? 'Rezultat: pachet de ' + formatEUR(lead.value) + '. ' : '') + pickDraft(d.tensiune) },
+      { key: 'tensiune', label: 'Tensiune / Dovadă', text: pickDraft(d.tensiune) },
       { key: 'trigger', label: 'Trigger DM', text: state.brand.ctaText || pickDraft(d.trigger) },
     ],
   };
@@ -2353,7 +2535,7 @@ function planStorySequenceFromPost(postId){
   pushUndo();
   const cat = state.checklist.categories.content ? 'content' : Object.keys(state.checklist.categories)[0];
   if (cat) {
-    state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Planifică 3-4 Stories pentru: ' + post.idea.slice(0,50) });
+    state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Planifică 3-4 Stories pentru: ' + post.idea.slice(0,50), oneOff: true });
     saveKey('checklist', state.checklist);
   }
   render();
@@ -2441,7 +2623,7 @@ function initiateRenewal(leadId){
   pushUndo();
   const cat = state.checklist.categories.sales ? 'sales' : Object.keys(state.checklist.categories)[0];
   if (cat) {
-    state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Apel retenție / re-semnare pachet — ' + lead.name });
+    state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Apel retenție / re-semnare pachet — ' + lead.name, oneOff: true });
     saveKey('checklist', state.checklist);
   }
   sendRenewalMessage(leadId);
@@ -2613,7 +2795,7 @@ function checkMilestones(){
   });
   [5, 10, 25, 50].forEach(threshold => {
     const key = 'clients_' + threshold;
-    if ((Number(state.goal.clients)||0) >= threshold && !state.gamification.milestonesShown.includes(key)) {
+    if ((Number(g.clients)||0) >= threshold && !state.gamification.milestonesShown.includes(key)) {
       state.gamification.milestonesShown.push(key);
       saveKey('gamification', state.gamification);
       toast('🎉 Ai ajuns la ' + threshold + ' clienți activi!');
@@ -2624,7 +2806,7 @@ function checkMilestones(){
 function computeMomentum(){
   const cs = computeChecklistStats();
   const storiesDone = computeTodayPosts().some(p => p.status === 'postat') ? 1 : 0;
-  const followupsDone = state.leads.some(l => l.status !== 'Închis' && l.followup === todayISO() && l.updatedAt && dateToISO(new Date(l.updatedAt)) === todayISO()) ? 1 : 0;
+  const followupsDone = computeUrgentLeads().length === 0 ? 1 : 0;
   const parts = [
     cs.pct >= 100 ? 1 : cs.pct/100,
     storiesDone,
@@ -2667,8 +2849,18 @@ function generateStorySequence(dateIso){
   // Prefer the type you've pre-set for this day (or its recurring weekday
   // recommendation) in the "Tip Story ghidaj" picker — it's a suggestion,
   // not a lock, so you can still change it on the generated card after.
-  const presetType = getEffectiveDayStoryType(iso);
-  const presetIdx = presetType ? STORY_ARCS.findIndex(a => a.name === presetType) : -1;
+  // getEffectiveDayStoryType returns an ARRAY (up to 3 planned types per
+  // day) — comparing it to a single arc name never matched, so the planned
+  // type was silently ignored. Names are also compared without diacritics
+  // ("Ofertă" in the planner vs "Oferta" in the arc list). With several
+  // types planned, each press generates the next one not yet made that day.
+  const foldName = n => smartTagFold(n).replace(/[^a-z0-9]+/g, ' ').trim();
+  const presetIdxs = getEffectiveDayStoryType(iso)
+    .map(tn => STORY_ARCS.findIndex(a => foldName(a.name) === foldName(tn)))
+    .filter(i => i >= 0);
+  const madeToday = state.storyVault.items.filter(x => x.date === iso).map(x => foldName(x.arcName));
+  const nextIdx = presetIdxs.find(i => !madeToday.includes(foldName(STORY_ARCS[i].name)));
+  const presetIdx = nextIdx !== undefined ? nextIdx : (presetIdxs.length ? presetIdxs[0] : -1);
   const idx = presetIdx >= 0 ? presetIdx : todayArcIndex();
   pushUndo();
   const item = buildStoryItem(idx);
@@ -2989,13 +3181,15 @@ function toggleTask(cat, id){
   saveKey('checklist', state.checklist); saveKey('activity', state.activity);
   render();
 }
-function addTask(cat){
+function addTask(cat, once){
   const input = document.getElementById('new-task-input-' + cat);
   if (!input) return;
   const val = input.value.trim();
   if (!val) { toast('Scrie o sarcină înainte de a o adăuga', 'error'); return; }
   pushUndo();
-  state.checklist.categories[cat].tasks.push({ id: uid(), label: val });
+  const task = { id: uid(), label: val };
+  if (once) task.oneOff = true;
+  state.checklist.categories[cat].tasks.push(task);
   saveKey('checklist', state.checklist);
   render();
 }
@@ -3494,10 +3688,13 @@ function renderFilmingMode(){
         '</div>' +
         (items.length ? (
           '<div id="teleprompter-text" style="flex:1; min-height:0; overflow-y:auto; background:#000; border-radius:14px; padding:32px 20px; margin-bottom:14px; scroll-behavior:auto;">' +
-            '<p style="font-size:28px; line-height:1.6; font-weight:700; text-align:center; color:#fff;">'+escapeHtml(shot.text)+'</p>' +
+            ((shot.hook || shot.body || shot.cta)
+              ? '<p class="text-xs" style="text-align:center; color:rgba(255,255,255,.45); margin-bottom:18px;">'+escapeHtml(shot.text)+'</p>' +
+                [shot.hook, shot.body, shot.cta].filter(Boolean).map(part => '<p style="font-size:28px; line-height:1.6; font-weight:700; text-align:center; color:#fff; white-space:pre-line; margin:0 0 28px;">'+escapeHtml(part)+'</p>').join('')
+              : '<p style="font-size:28px; line-height:1.6; font-weight:700; text-align:center; color:#fff;">'+escapeHtml(shot.text)+'</p>') +
           '</div>' +
           '<div class="flex items-center justify-center gap-2 flex-wrap" style="margin-bottom:10px;">' +
-            [1,1.5,2].map(s => '<button data-action="set-teleprompter-speed" data-speed="'+s+'" class="status-pill'+(teleprompterSpeed===s?' active':'')+'"'+(teleprompterSpeed===s?' style="background:var(--accent);"':'')+'">'+s+'x</button>').join('') +
+            [1,1.5,2].map(s => '<button data-action="set-teleprompter-speed" data-speed="'+s+'" class="status-pill'+(teleprompterSpeed===s?' active':'')+'"'+(teleprompterSpeed===s?' style="background:var(--accent);"':'')+'>'+s+'x</button>').join('') +
           '</div>' +
           '<div class="flex items-center justify-center gap-3">' +
             '<button data-action="teleprompter-nav" data-dir="-1" class="btn btn-icon">'+icon('chevronLeft','icon-sm')+'</button>' +
@@ -3760,6 +3957,12 @@ function removeScript(pillar, id){
 /* =========================================================
    MUTATIONS — leads + payments/installments
 ========================================================= */
+// A new lead with no follow-up date never shows up anywhere as "to do" —
+// suggest 2 days out by default (still editable or clearable in the form).
+function newLeadFollowupDefault(){
+  const d = new Date(); d.setDate(d.getDate() + 2);
+  return dateToISO(d);
+}
 function addLead(){
   const name = document.getElementById('new-lead-name');
   const status = document.getElementById('new-lead-status');
@@ -3776,7 +3979,7 @@ function addLead(){
     followup: followup ? followup.value : '',
     source: source ? source.value : 'DM',
     packageDurationDays: Number(state.settings.defaultPackageDuration) || 90,
-    paid: 0, payments: [], igLink: '', updatedAt: new Date().toISOString(),
+    paid: 0, payments: [], igLink: (document.getElementById('new-lead-iglink') || { value: '' }).value.trim(), updatedAt: new Date().toISOString(),
   });
   logActivity('lead_added', 'Lead nou: ' + leadName);
   saveKey('leads', state.leads); saveKey('activity', state.activity);
@@ -3792,7 +3995,9 @@ function updateLeadField(id, field, value){
   lead.updatedAt = new Date().toISOString();
   let closedNow = false;
   let reopenedNow = false;
-  if (field === 'status' && value === 'Închis' && prevStatus !== 'Închis') {
+  const wasActiveClient = prevStatus === 'Închis' || prevStatus === 'Retain';
+  const isActiveClientNow = lead.status === 'Închis' || lead.status === 'Retain';
+  if (field === 'status' && isActiveClientNow && !wasActiveClient) {
     closedNow = true;
     logActivity('lead_closed', lead.name + ' — lead închis (' + formatEUR(lead.value) + ')', lead.value);
     state.goal.clients = (Number(state.goal.clients) || 0) + 1;
@@ -3802,13 +4007,16 @@ function updateLeadField(id, field, value){
     if (!lead.startDate) lead.startDate = todayISO();
     const cat = state.checklist.categories.sales ? 'sales' : Object.keys(state.checklist.categories)[0];
     if (cat) {
-      state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Trimite onboarding, chestionar inițial & invitație Everfit — ' + lead.name });
+      state.checklist.categories[cat].tasks.push({ id: uid(), label: 'Trimite onboarding, chestionar inițial & invitație Everfit — ' + lead.name, oneOff: true });
       saveKey('checklist', state.checklist);
     }
-  } else if (field === 'status' && prevStatus === 'Închis' && value !== 'Închis') {
-    // Symmetric case: a lead that WAS an active closed client no longer is
-    // (status corrected, or client churned) — the clients count should
-    // reflect that, mirroring the +1 applied when it was closed.
+  } else if (field === 'status' && wasActiveClient && !isActiveClientNow) {
+    // Symmetric case: a lead that WAS an active client (Închis or Retain) no
+    // longer is (status corrected, or client churned) — the clients count
+    // should reflect that, mirroring the +1 applied when it was closed.
+    // Moving Închis → Retain is a renewal, NOT a loss: it used to be logged
+    // as "nu mai e activ", took 1 off the client count and showed up as
+    // churn in the monthly report.
     reopenedNow = true;
     logActivity('lead_reopened', lead.name + ' — nu mai e activ (status: ' + value + ')');
     state.goal.clients = Math.max(0, (Number(state.goal.clients) || 0) - 1);
@@ -3819,6 +4027,7 @@ function updateLeadField(id, field, value){
   if (qualifyOpenFor === id) renderOverlay();
   if (closedNow) toast(lead.name + ' — închis. Clienți activi +1, task onboarding adăugat.');
   if (reopenedNow) toast(lead.name + ' — nu mai e activ. Clienți activi −1, MRR actualizat.');
+  if (field === 'status' && prevStatus === 'Închis' && value === 'Retain') toast(lead.name + ' — reînnoit ✓ rămâne client activ');
 }
 function deleteLead(id){
   const lead = state.leads.find(l => l.id === id);
@@ -3870,7 +4079,9 @@ function quickFollowup(id, days){
   const lead = state.leads.find(l => l.id === id);
   if (!lead) return;
   pushUndo();
-  const base = lead.followup ? new Date(lead.followup + 'T00:00:00') : new Date();
+  // Count from today when the follow-up is missing or already in the past —
+  // "+3 zile" on something 10 days late used to land 7 days ago, still late.
+  const base = (lead.followup && lead.followup > todayISO()) ? new Date(lead.followup + 'T00:00:00') : new Date();
   base.setDate(base.getDate() + days);
   lead.followup = dateToISO(base);
   lead.updatedAt = new Date().toISOString();
@@ -4161,7 +4372,7 @@ function onNotesInput(text){
 ========================================================= */
 async function resetAllData(){
   if (!confirm('Sigur vrei să ștergi toate datele salvate (tot — obiectiv, checklist, calendar, lead-uri, conținut, resurse, notițe, brand, gamification)? Această acțiune nu poate fi anulată. Poți exporta un backup înainte, din meniu.')) return;
-  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault')]);
+  await Promise.all([deleteKey('goal'), deleteKey('checklist'), deleteKey('calendar'), deleteKey('leads'), deleteKey('content'), deleteKey('resources'), deleteKey('activity'), deleteKey('notes'), deleteKey('links'), deleteKey('trackedAccounts'), deleteKey('savedLinks'), deleteKey('navOrder'), deleteKey('qualifyConfig'), deleteKey('settings'), deleteKey('streak'), deleteKey('ads'), deleteKey('testimonials'), deleteKey('shotList'), deleteKey('brand'), deleteKey('gamification'), deleteKey('storyVault')]);
   QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
   state = {
     goal: { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE },
@@ -4172,9 +4383,10 @@ async function resetAllData(){
     resources: seedResources(),
     activity: [],
     links: [],
-  savedLinks: [],
-  navOrder: [],
-  settings: { renewalWarnDays: 15, renewalDangerDays: 5, defaultPackageDuration: 90, followupReasons: null },
+    trackedAccounts: [],
+    savedLinks: [],
+    navOrder: [],
+    settings: { renewalWarnDays: 15, renewalDangerDays: 5, defaultPackageDuration: 90, followupReasons: null },
     streak: { count: 0, lastCompletedDate: null },
     ads: { monthlyBudget: 0 },
     testimonials: [],
@@ -4241,7 +4453,9 @@ function renderNav(){
     const active = item.id === activeTab;
     return '<button data-action="goto-tab" data-tab="'+item.id+'" class="bottom-nav-item'+(active?' active':'')+'" style="position:relative;">' +
       icon(item.icon, 'icon') + '<span>'+item.label+'</span></button>';
-  }).join('');
+  }).join('') +
+  '<button data-action="open-more" class="bottom-nav-item'+(BOTTOM_NAV.some(b => b.id === activeTab)?'':' active')+'" aria-label="Toate secțiunile">' +
+    icon('grid', 'icon') + '<span>Mai mult</span></button>';
 }
 function renderTopbar(){
   const d = new Date();
@@ -4341,6 +4555,155 @@ function applyTabAccent(tab){
 function switchTab(tab){ activeTab = tab; applyTabAccent(tab); render(); window.scrollTo({ top: 0, behavior: 'auto' }); }
 
 /* =========================================================
+   "DE FĂCUT AZI" — the first thing on the Dashboard: who to
+   write to today (with the actions right there), what gets
+   posted today, and where the checklist stands. Everything
+   else on the Dashboard is numbers; this is the to-do.
+========================================================= */
+const TODAY_CARD_MAX_LEADS = 5;
+function overdueLabel(iso){
+  const today = new Date(todayISO() + 'T00:00:00');
+  const due = new Date(iso + 'T00:00:00');
+  const days = Math.round((today - due) / (24*60*60*1000));
+  if (days <= 0) return { text: 'azi', late: false };
+  if (days === 1) return { text: 'întârziat 1 zi', late: true };
+  return { text: 'întârziat ' + days + ' zile', late: true };
+}
+function completeFollowup(id){
+  const lead = state.leads.find(l => l.id === id);
+  if (!lead) return;
+  pushUndo();
+  lead.followup = '';
+  lead.followupReason = '';
+  lead.followupDescription = '';
+  lead.updatedAt = new Date().toISOString();
+  logActivity('followup', 'Follow-up făcut: ' + lead.name);
+  saveKey('leads', state.leads); saveKey('activity', state.activity);
+  render();
+  if (qualifyOpenFor === id) renderOverlay();
+  toast('Follow-up bifat — ' + lead.name);
+}
+function todayFocusCardHtml(){
+  const t = todayISO();
+  const urgent = computeUrgentLeads().slice().sort((a,b) => (a.followup||'').localeCompare(b.followup||''));
+  const posts = computeTodayPosts();
+  const cs = computeChecklistStats();
+  const tomorrowD = new Date(); tomorrowD.setDate(tomorrowD.getDate() + 1);
+  const tomorrow = dateToISO(tomorrowD);
+  const tomorrowLeads = state.leads.filter(l => !l.archived && l.followup === tomorrow).length;
+  const tomorrowPosts = state.calendar.posts.filter(p => p.date === tomorrow).length;
+  const backup = formatBackupStatus();
+  const hasRealData = state.leads.length > 0 || state.calendar.posts.length > 0;
+
+  const leadRow = (l) => {
+    const od = overdueLabel(l.followup);
+    const statusColor = LEAD_STATUS_COLORS[l.status] || '#9CA3AF';
+    const why = [l.followupReason, l.followupDescription].filter(Boolean).join(' — ');
+    return '<div class="today-row">' +
+      '<div class="flex items-start justify-between gap-2">' +
+        '<button data-action="open-qualify" data-id="'+l.id+'" class="today-name" title="Deschide fișa">' +
+          escapeHtml(l.name) +
+          ' <span class="text-xs" style="color:'+statusColor+'; font-weight:500;">· '+escapeHtml(l.status)+'</span>' +
+        '</button>' +
+        '<span class="text-xs shrink-0" style="font-weight:600; color:'+(od.late?'#fca5a5':'#FBBF24')+'; padding-top:2px;">'+od.text+'</span>' +
+      '</div>' +
+      (why ? '<p class="text-xs mute2" style="margin-top:2px;">'+escapeHtml(why)+'</p>' : '') +
+      (l.callNotes ? '<p class="text-xs mute3 today-clamp" style="margin-top:2px;">📝 '+escapeHtml(l.callNotes)+'</p>' : '') +
+      '<div class="flex flex-wrap gap-2" style="margin-top:8px;">' +
+        '<button data-action="open-instagram-dm" data-id="'+l.id+'" class="btn btn-sm'+(l.igLink?' btn-primary':'')+'" title="'+(l.igLink?'Deschide conversația':'Adaugă linkul conversației ca să ajungi direct în DM')+'">'+icon('send','icon-sm')+(l.igLink?'Scrie-i':'Adaugă link DM')+'</button>' +
+        '<button data-action="open-outreach" data-id="'+l.id+'" class="btn btn-sm" title="Șabloane de mesaj cu numele completat">'+icon('copy','icon-sm')+'Șabloane</button>' +
+        '<button data-action="quick-followup" data-id="'+l.id+'" data-days="1" class="btn btn-sm" title="Am scris — revin mâine">+1 zi</button>' +
+        '<button data-action="quick-followup" data-id="'+l.id+'" data-days="3" class="btn btn-sm" title="Am scris — revin peste 3 zile">+3 zile</button>' +
+        '<button data-action="complete-followup" data-id="'+l.id+'" class="btn btn-sm" style="color:#6ee7b7; border-color:rgba(52,211,153,.3);" title="Rezolvat — nu mai e nevoie de follow-up">✓ Gata</button>' +
+      '</div>' +
+    '</div>';
+  };
+  const postRow = (p) => {
+    const pl = getCategoryInfo(p.pillar);
+    return '<div class="today-row">' +
+      '<div class="flex items-center justify-between gap-2">' +
+        '<button data-action="open-post-detail" data-id="'+p.id+'" class="today-name" style="font-weight:500;" title="Vezi scriptul">' +
+          '<span class="dot" style="background:'+pl.color+'; margin-right:7px; vertical-align:middle;"></span>' + escapeHtml(p.idea) +
+        '</button>' +
+        '<button data-action="cycle-status" data-id="'+p.id+'" class="badge shrink-0" style="cursor:pointer; color:'+POST_STATUS_COLORS[p.status]+'; border-color:'+POST_STATUS_COLORS[p.status]+'55;" title="Apasă ca să treci la pasul următor">'+POST_STATUS_LABELS[p.status]+' →</button>' +
+      '</div>' +
+    '</div>';
+  };
+  const section = (title, count, bodyHtml) =>
+    '<div style="margin-top:14px;">' +
+      '<p class="eyebrow" style="margin-bottom:2px;">'+title+(count !== null ? ' <span class="tabular" style="color:var(--text-dim);">('+count+')</span>' : '')+'</p>' +
+      bodyHtml +
+    '</div>';
+
+  const nothingDue = !urgent.length && !posts.length;
+  const tomorrowBits = [];
+  if (tomorrowLeads) tomorrowBits.push(tomorrowLeads + (tomorrowLeads === 1 ? ' follow-up' : ' follow-up-uri'));
+  if (tomorrowPosts) tomorrowBits.push(tomorrowPosts + (tomorrowPosts === 1 ? ' postare' : ' postări'));
+
+  return '<div class="card" style="border-color:var(--accent-border);">' +
+    '<div class="flex items-center justify-between gap-2">' +
+      '<p class="h2">De făcut azi</p>' +
+      '<button data-action="goto-tab" data-tab="checklist" class="badge" style="cursor:pointer;" title="Deschide checklist-ul zilei">'+icon('check','icon-sm')+' Checklist '+cs.done+'/'+cs.total+'</button>' +
+    '</div>' +
+    (urgent.length ? section('Scrie-le azi', urgent.length,
+        urgent.slice(0, TODAY_CARD_MAX_LEADS).map(leadRow).join('') +
+        (urgent.length > TODAY_CARD_MAX_LEADS ? '<button data-action="goto-urgent-leads" class="btn btn-sm w-full" style="justify-content:center; margin-top:10px;">Vezi toate cele '+urgent.length+' în CRM →</button>' : '')
+      ) : '') +
+    (posts.length ? section('De postat azi', posts.length, posts.map(postRow).join('')) : '') +
+    (nothingDue
+      ? '<p class="text-sm good-text" style="margin-top:12px;">✓ Niciun follow-up și nicio postare programată pentru azi.</p>' +
+        '<div class="flex flex-wrap gap-2" style="margin-top:10px;">' +
+          '<button data-action="goto-tab" data-tab="crm" class="btn btn-sm">'+icon('users','icon-sm')+'Deschide CRM</button>' +
+          '<button data-action="goto-tab" data-tab="calendar" class="btn btn-sm">'+icon('calendar','icon-sm')+'Planifică o postare</button>' +
+        '</div>'
+      : '') +
+    (tomorrowBits.length ? '<p class="text-xs mute3" style="margin-top:12px;">Mâine: '+tomorrowBits.join(' · ')+'.</p>' : '') +
+    (hasRealData && backup.stale
+      ? '<button data-action="open-sync" class="text-xs" style="display:block; width:100%; text-align:left; margin-top:12px; padding:8px 10px; border-radius:8px; border:1px solid rgba(251,191,36,.3); background:rgba(251,191,36,.06); color:#fbbf24;">⚠ Ultimul backup: '+backup.text+' — apasă ca să trimiți sau să descarci unul.</button>'
+      : '') +
+  '</div>';
+}
+
+/* =========================================================
+   "MAI MULT" — every section in one sheet, from the phone's
+   bottom bar. Before this, anything that wasn't one of the
+   four bottom icons had to be found by swiping the top strip,
+   and Sales Call Desk couldn't be reached on a phone at all.
+========================================================= */
+let moreMenuOpen = false;
+function openMoreMenu(){ closeFabMenu(); moreMenuOpen = true; renderOverlay(); }
+function closeMoreMenu(){ moreMenuOpen = false; renderOverlay(); }
+function moreMenuOverlayHtml(){
+  const stats = computeChecklistStats();
+  const urgent = computeUrgentLeads().length;
+  const tiles = getOrderedNavFlat().map(item => {
+    let sub = '';
+    if (item.id === 'checklist') sub = stats.done + '/' + stats.total + ' azi';
+    else if (item.id === 'crm' && urgent > 0) sub = urgent + (urgent === 1 ? ' follow-up azi' : ' follow-up-uri azi');
+    return '<button data-action="more-goto" data-tab="'+item.id+'" class="more-tile'+(item.id===activeTab?' active':'')+'">' +
+      icon(item.icon, 'icon') +
+      '<span>'+item.label+'</span>' +
+      (sub ? '<span class="more-tile-sub"'+(item.id==='crm'?' style="color:#fca5a5;"':'')+'>'+sub+'</span>' : '') +
+    '</button>';
+  }).join('');
+  return '<div class="overlay-backdrop" data-action="close-more-backdrop">' +
+    '<div class="overlay-panel">' +
+      '<div class="overlay-head">' +
+        '<p class="h2">Toate secțiunile</p>' +
+        '<button data-action="close-more" class="icon-btn" aria-label="Închide">'+icon('x','icon')+'</button>' +
+      '</div>' +
+      '<div class="overlay-body">' +
+        '<div class="more-grid">' + tiles + '</div>' +
+        '<div class="more-grid" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);">' +
+          '<button data-action="more-notes" class="more-tile">'+icon('note','icon')+'<span>Notițe</span></button>' +
+          '<button data-action="more-sync" class="more-tile">'+icon('cloud','icon')+'<span>Sync & Backup</span></button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+/* =========================================================
    RENDER: DASHBOARD
 ========================================================= */
 function renderProgress(){
@@ -4418,7 +4781,7 @@ function renderProgress(){
             '<p class="text-xs mute3">streak curent'+(multiplier>1?' — bonus ×'+multiplier+' la XP':'')+'</p>' +
           '</div>' +
         '</div>' +
-        (nextBadge ? '<div style="text-align:right;"><p class="text-xs mute3">Următorul brelog</p><p class="text-sm" style="font-weight:600;">🏅 la '+nextBadge+' zile</p></div>' : '') +
+        (nextBadge ? '<div style="text-align:right;"><p class="text-xs mute3">Următoarea insignă</p><p class="text-sm" style="font-weight:600;">🏅 la '+nextBadge+' zile</p></div>' : '') +
       '</div>' +
       (badgesEarned.length ? '<div class="flex flex-wrap gap-2 mt-3" style="margin-top:14px;">'+badgesEarned.map(b=>'<span class="badge" style="background:rgba(251,191,36,.12); border-color:rgba(251,191,36,.3); color:#FBBF24;">🏅 '+b+' zile</span>').join('')+'</div>' : '') +
     '</div>' +
@@ -4468,7 +4831,9 @@ function renderDashboard(){
   const urgentLeads = computeUrgentLeads();
   const todayPosts = computeTodayPosts();
   const outstanding = computeOutstandingBalance();
-  const alerts = computeSmartAlerts();
+  // The follow-up and checklist lines are already spelled out, with their
+  // actions, in the "De făcut azi" card at the top — no need to repeat them.
+  const alerts = computeSmartAlerts().filter(a => a.kind !== 'urgent' && a.kind !== 'checklist');
   const ads = computeAdsMetrics();
   const dmStats = computeDmConversionStats();
   const renewals = computeRenewalPipeline();
@@ -4548,6 +4913,8 @@ function renderDashboard(){
   document.getElementById('content').innerHTML =
   '<div class="animate-fade flex-col gap-4" style="display:flex;">' +
 
+    todayFocusCardHtml() +
+
     '<div class="card-hero">' +
       '<div class="card-hero-glow"></div>' +
       '<div class="relative">' +
@@ -4614,7 +4981,7 @@ function renderDashboard(){
             }).join('') +
           '</div>' +
         '</div>'
-      : '<div class="card" style="border-color:rgba(52,211,153,.2);"><p class="text-sm good-text">✓ Totul e sub control — nimic urgent acum.</p></div>') +
+      : '') +
 
     (renewals.length ? (
       '<div class="card">' +
@@ -4735,7 +5102,7 @@ function renderChecklist(){
         '<button data-action="toggle-task" data-cat="'+cat+'" data-id="'+t.id+'" class="checkbox'+(checked?' checked':'')+'">' +
           (checked ? icon('check','icon-sm').replace('stroke="currentColor"','stroke="#0A0A0A"') : '') +
         '</button>' +
-        '<span class="task-label'+(checked?' done':'')+'">'+escapeHtml(t.label)+'</span>' +
+        '<span class="task-label'+(checked?' done':'')+'">'+escapeHtml(t.label)+(t.oneOff ? ' <span class="badge" style="font-size:9.5px; padding:1px 7px; vertical-align:middle; text-decoration:none;" title="Sarcină de o singură dată — dispare din listă a doua zi după ce o bifezi">o dată</span>' : '')+'</span>' +
         '<div class="row-actions">' +
           '<button data-action="edit-task" data-cat="'+cat+'" data-id="'+t.id+'" class="icon-btn">'+icon('edit','icon-sm')+'</button>' +
           '<button data-action="remove-task" data-cat="'+cat+'" data-id="'+t.id+'" class="icon-btn danger">'+icon('trash','icon-sm')+'</button>' +
@@ -4749,8 +5116,10 @@ function renderChecklist(){
       '<div>' + tasks.map(taskRow).join('') + '</div>' +
       '<div class="flex gap-2 mt-3">' +
         '<input id="new-task-input-'+cat+'" type="text" placeholder="Adaugă o sarcină nouă…" class="flex-1" />' +
-        '<button data-action="add-task" data-cat="'+cat+'" class="btn btn-icon shrink-0">'+icon('plus','icon-sm')+'</button>' +
+        '<button data-action="add-task" data-cat="'+cat+'" class="btn btn-icon shrink-0" title="Adaugă ca sarcină zilnică (revine în fiecare zi)" aria-label="Adaugă sarcină zilnică">'+icon('plus','icon-sm')+'</button>' +
+        '<button data-action="add-task-once" data-cat="'+cat+'" class="btn btn-icon shrink-0" style="font-size:11px; font-weight:700;" title="Adaugă doar o dată — dispare din listă a doua zi după ce o bifezi" aria-label="Adaugă sarcină de o singură dată">1×</button>' +
       '</div>' +
+      '<p class="text-xs mute3" style="margin-top:6px;">+ zilnică · 1× doar o dată</p>' +
     '</div>';
   }).join('');
 
@@ -5279,7 +5648,7 @@ function renderCRM(){
   if (leadTagFilter.length) leads = leads.filter(l => (l.tags||[]).some(tag => leadTagFilter.includes(tag)));
   if (leadSearch.trim()) {
     const q = normalize(leadSearch);
-    leads = leads.filter(l => normalize(l.name).includes(q));
+    leads = leads.filter(l => normalize([l.name, (l.tags||[]).join(' '), l.callNotes, l.followupDescription, l.source].filter(Boolean).join(' ')).includes(q));
   }
 
   const allTags = Array.from(new Set(state.leads.flatMap(l => l.tags||[]))).sort();
@@ -5319,7 +5688,9 @@ function renderCRM(){
       '<td style="min-width:140px;"><div class="flex items-center gap-2">' +
         '<button data-action="open-qualify" data-id="'+l.id+'" class="badge" style="color:'+scoreColor(score)+'; border-color:'+scoreColor(score)+'44; flex-shrink:0;" title="Scor de calificare — click pentru detalii">'+icon('target','icon-sm')+' '+score+'</button>' +
         '<input data-field="lead-name" data-id="'+l.id+'" value="'+escapeAttr(l.name)+'" class="field-plain text-sm" />' +
-      '</div>' + tagsBlock(l) + '</td>' +
+      '</div>' + tagsBlock(l) +
+        (l.callNotes ? '<p data-action="open-qualify" data-id="'+l.id+'" class="text-xs mute3 truncate" style="margin-top:3px; max-width:240px; cursor:pointer;" title="'+escapeAttr(l.callNotes)+'">📝 '+escapeHtml(l.callNotes)+'</p>' : '') +
+      '</td>' +
       '<td><select data-field="lead-status" data-id="'+l.id+'" style="font-size:12px;color:'+(LEAD_STATUS_COLORS[l.status]||'#fff')+';">' +
           LEAD_STATUSES.map(s => '<option value="'+s+'" '+(s===l.status?'selected':'')+'>'+s+'</option>').join('') +
         '</select></td>' +
@@ -5332,8 +5703,7 @@ function renderCRM(){
         '</div>' +
       '</td>' +
       '<td><select data-field="lead-source" data-id="'+l.id+'" style="font-size:12px; color:rgba(245,245,240,.6);">' +
-          '<option value="DM" '+(l.source==='DM'?'selected':'')+'>DM</option>' +
-          '<option value="Formular" '+(l.source==='Formular'?'selected':'')+'>Formular</option>' +
+          leadSourceOptionsHtml(l.source) +
         '</select></td>' +
       '<td class="text-right"><div class="row-actions" style="justify-content:flex-end; flex-wrap:wrap;">' +
         '<button data-action="open-instagram-dm" data-id="'+l.id+'" class="icon-btn'+(l.igLink?'':' mute3')+'" aria-label="Mesaj" title="'+(l.igLink?'Deschide conversația pe Instagram':'Adaugă linkul conversației de Instagram')+'">'+icon('send','icon-sm')+'</button>' +
@@ -5362,6 +5732,11 @@ function renderCRM(){
       (isUrgent ? '<div style="background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:8px; padding:6px 10px; margin-bottom:10px;">' +
           '<span class="text-xs" style="font-weight:700; color:#fca5a5;">📌 '+(l.followupReason?escapeHtml(l.followupReason):(l.followup===t?'Follow-up azi':'Follow-up depășit — '+formatDateRO(l.followup)))+'</span>' +
           (l.followupDescription ? '<p class="text-xs mute2" style="margin-top:2px;">'+escapeHtml(l.followupDescription)+'</p>' : '') +
+          '<div class="flex flex-wrap gap-2" style="margin-top:8px;">' +
+            '<button data-action="open-instagram-dm" data-id="'+l.id+'" class="btn btn-sm'+(l.igLink?' btn-primary':'')+'">'+icon('send','icon-sm')+(l.igLink?'Scrie-i':'Adaugă link DM')+'</button>' +
+            '<button data-action="quick-followup" data-id="'+l.id+'" data-days="1" class="btn btn-sm">+1 zi</button>' +
+            '<button data-action="complete-followup" data-id="'+l.id+'" class="btn btn-sm" style="color:#6ee7b7; border-color:rgba(52,211,153,.3);">✓ Gata</button>' +
+          '</div>' +
         '</div>' : '') +
       (renewal ? '<div class="flex items-center justify-between gap-2" style="background:'+(renewal.level==='danger'?'rgba(239,68,68,.14)':'rgba(251,191,36,.14)')+'; border:1px solid '+(renewal.level==='danger'?'rgba(239,68,68,.35)':'rgba(251,191,36,.35)')+'; border-radius:8px; padding:6px 10px; margin-bottom:10px;">' +
           '<span class="text-xs" style="font-weight:700; color:'+(renewal.level==='danger'?'#fca5a5':'#FBBF24')+';">⏰ Pachet expiră în '+renewal.daysUntil+' zile</span>' +
@@ -5377,7 +5752,11 @@ function renderCRM(){
         '</div>' +
       '</div>' +
       tagsBlock(l) +
-      '<button data-action="open-qualify" data-id="'+l.id+'" class="badge mt-2" style="color:'+scoreColor(score)+'; border-color:'+scoreColor(score)+'44;">'+icon('target','icon-sm')+' Scor calificare: '+score+'</button>' +
+      (l.callNotes ? '<p data-action="open-qualify" data-id="'+l.id+'" class="text-xs mute2 today-clamp" style="margin-top:6px; cursor:pointer;">📝 '+escapeHtml(l.callNotes)+'</p>' : '') +
+      '<div class="flex flex-wrap gap-2 mt-2">' +
+        '<button data-action="open-qualify" data-id="'+l.id+'" class="badge" style="color:'+scoreColor(score)+'; border-color:'+scoreColor(score)+'44;">'+icon('target','icon-sm')+' Scor: '+score+'</button>' +
+        '<button data-action="open-qualify" data-id="'+l.id+'" class="badge">'+icon('note','icon-sm')+' Fișă & notițe</button>' +
+      '</div>' +
       '<div class="status-pill-row mt-3" style="margin-top:10px;">' +
         LEAD_STATUSES.map(s => {
           const active = s === l.status;
@@ -5431,14 +5810,16 @@ function renderCRM(){
               '<p class="eyebrow" style="margin:0;">Adaugă lead nou</p>' +
               '<button data-action="toggle-add-lead-form" class="icon-btn" aria-label="Închide">'+icon('x','icon-sm')+'</button>' +
             '</div>' +
-            '<div class="flex flex-wrap gap-2">' +
-              '<input id="new-lead-name" type="text" placeholder="Nume" class="flex-1" style="min-width:140px;" />' +
-              '<select id="new-lead-status">'+statOptions+'</select>' +
-              '<input id="new-lead-value" type="number" min="0" placeholder="Valoare €" style="width:110px;" />' +
-              '<input id="new-lead-followup" type="date" style="color:rgba(245,245,240,.7);" />' +
-              '<select id="new-lead-source"><option value="DM">DM</option><option value="Formular">Formular</option></select>' +
-              '<button data-action="add-lead" class="btn btn-primary">'+icon('plus','icon-sm')+'Adaugă</button>' +
+            '<div class="grid add-lead-grid">' +
+              '<div class="add-lead-wide"><label class="field-label" for="new-lead-name">Nume</label><input id="new-lead-name" type="text" placeholder="Nume sau @utilizator" /></div>' +
+              '<div><label class="field-label" for="new-lead-status">Status</label><select id="new-lead-status">'+statOptions+'</select></div>' +
+              '<div><label class="field-label" for="new-lead-source">De unde a venit</label><select id="new-lead-source">'+leadSourceOptionsHtml('DM')+'</select></div>' +
+              '<div><label class="field-label" for="new-lead-followup">Următorul follow-up</label><input id="new-lead-followup" type="date" value="'+(newLeadFollowupDefault())+'" /></div>' +
+              '<div><label class="field-label" for="new-lead-value">Valoare € (opțional)</label><input id="new-lead-value" type="number" min="0" placeholder="0" /></div>' +
+              '<div class="add-lead-wide"><label class="field-label" for="new-lead-iglink">Link conversație (opțional)</label><input id="new-lead-iglink" type="text" placeholder="https://www.instagram.com/direct/t/..." /></div>' +
             '</div>' +
+            '<p class="text-xs mute3" style="margin-top:8px;">Cu o dată de follow-up, lead-ul apare singur în „De făcut azi" când îi vine rândul.</p>' +
+            '<button data-action="add-lead" class="btn btn-primary w-full" style="justify-content:center; margin-top:10px;">'+icon('plus','icon-sm')+'Adaugă lead</button>' +
           '</div>'
         : '<button data-action="toggle-add-lead-form" class="btn btn-primary w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă lead nou</button>'
     ) : '') +
@@ -5459,13 +5840,13 @@ function renderCRM(){
 
     (allTags.length ? (
       '<div class="flex flex-wrap gap-2">' +
-        allTags.map(tag => '<button data-action="toggle-lead-tag-filter" data-tag="'+escapeAttr(tag)+'" class="status-pill'+(leadTagFilter.includes(tag)?' active':'')+'"'+(leadTagFilter.includes(tag)?' style="background:var(--accent);"':'')+'">#'+escapeHtml(tag)+'</button>').join('') +
+        allTags.map(tag => '<button data-action="toggle-lead-tag-filter" data-tag="'+escapeAttr(tag)+'" class="status-pill'+(leadTagFilter.includes(tag)?' active':'')+'"'+(leadTagFilter.includes(tag)?' style="background:var(--accent);"':'')+'>#'+escapeHtml(tag)+'</button>').join('') +
       '</div>'
     ) : '') +
 
     '<div class="flex gap-2 items-center">' +
       icon('search','icon-sm') +
-      '<input id="lead-search-input" type="text" placeholder="Caută după nume…" value="'+escapeAttr(leadSearch)+'" class="flex-1" />' +
+      '<input id="lead-search-input" type="text" placeholder="Caută după nume, tag sau notițe…" value="'+escapeAttr(leadSearch)+'" class="flex-1" />' +
     '</div>' +
 
     (leads.length ? '' :
@@ -6053,7 +6434,7 @@ function renderTestimonials(){
 
     (allTags.length
       ? '<div class="flex flex-wrap gap-2">' +
-          allTags.map(t => '<button data-action="toggle-testimonial-tag" data-tag="'+escapeAttr(t)+'" class="status-pill'+(testimonialTagFilter.includes(t)?' active':'')+'"'+(testimonialTagFilter.includes(t)?' style="background:var(--accent);"':'')+'">#'+escapeHtml(t)+'</button>').join('') +
+          allTags.map(t => '<button data-action="toggle-testimonial-tag" data-tag="'+escapeAttr(t)+'" class="status-pill'+(testimonialTagFilter.includes(t)?' active':'')+'"'+(testimonialTagFilter.includes(t)?' style="background:var(--accent);"':'')+'>#'+escapeHtml(t)+'</button>').join('') +
         '</div>'
       : '') +
 
@@ -6199,7 +6580,7 @@ function renderMaterialsSection(){
 
     (allTags.length
       ? '<div class="flex flex-wrap gap-2">' +
-          allTags.map(t => '<button data-action="toggle-link-tag" data-tag="'+escapeAttr(t)+'" class="status-pill'+(linkTagFilter.includes(t)?' active':'')+'"'+(linkTagFilter.includes(t)?' style="background:var(--accent);"':'')+'">#'+escapeHtml(t)+'</button>').join('') +
+          allTags.map(t => '<button data-action="toggle-link-tag" data-tag="'+escapeAttr(t)+'" class="status-pill'+(linkTagFilter.includes(t)?' active':'')+'"'+(linkTagFilter.includes(t)?' style="background:var(--accent);"':'')+'>#'+escapeHtml(t)+'</button>').join('') +
         '</div>'
       : '') +
 
@@ -6301,7 +6682,7 @@ function renderTrackedAccountsSection(){
 
     (allCategories.length
       ? '<div class="flex flex-wrap gap-2">' +
-          allCategories.map(c => '<button data-action="toggle-account-category" data-cat="'+escapeAttr(c)+'" class="status-pill'+(accountCategoryFilter.includes(c)?' active':'')+'"'+(accountCategoryFilter.includes(c)?' style="background:var(--accent);"':'')+'">#'+escapeHtml(c)+'</button>').join('') +
+          allCategories.map(c => '<button data-action="toggle-account-category" data-cat="'+escapeAttr(c)+'" class="status-pill'+(accountCategoryFilter.includes(c)?' active':'')+'"'+(accountCategoryFilter.includes(c)?' style="background:var(--accent);"':'')+'>#'+escapeHtml(c)+'</button>').join('') +
         '</div>'
       : '') +
 
@@ -6414,6 +6795,15 @@ function updateCallNotes(leadId, text){
   if (!lead) return;
   lead.callNotes = text;
   saveKey('leads', state.leads);
+}
+let leadNotesSaveTimer = null;
+function onLeadNotesInput(leadId, text){
+  const lead = state.leads.find(l => l.id === leadId);
+  if (!lead) return;
+  lead.callNotes = text;
+  lead.updatedAt = new Date().toISOString();
+  clearTimeout(leadNotesSaveTimer);
+  leadNotesSaveTimer = setTimeout(() => saveKey('leads', state.leads), 500);
 }
 
 function renderLinksHub(){
@@ -6796,6 +7186,7 @@ function renderOverlay(){
   else if (postDetailFor) { root.innerHTML = postDetailOverlayHtml(postDetailFor); }
   else if (snippetOpenFor) { root.innerHTML = snippetOverlayHtml(); }
   else if (syncOpen) { root.innerHTML = syncOverlayHtml(); }
+  else if (moreMenuOpen) { root.innerHTML = moreMenuOverlayHtml(); }
   else { root.innerHTML = ''; lastOverlayScrollTop = 0; return; }
   const newBody = root.querySelector('.overlay-body');
   if (newBody && prevScroll) newBody.scrollTop = prevScroll;
@@ -6947,7 +7338,7 @@ function qualifyOverlayHtml(leadId){
   return '<div class="overlay-backdrop" data-action="close-qualify-backdrop">' +
     '<div class="overlay-panel">' +
       '<div class="overlay-head">' +
-        '<p class="h2">Calificare — '+escapeHtml(lead.name)+'</p>' +
+        '<p class="h2">Fișă — '+escapeHtml(lead.name)+'</p>' +
         '<button data-action="close-qualify" class="icon-btn">'+icon('x','icon')+'</button>' +
       '</div>' +
       '<div class="overlay-body">' +
@@ -6955,6 +7346,20 @@ function qualifyOverlayHtml(leadId){
           '<p class="eyebrow" style="margin:0;">Scor de calificare</p>' +
           '<p class="num-lg tabular" style="color:'+scoreColor(score)+';">'+score+'</p>' +
         '</div>' +
+        '<div style="margin-top:12px;">' +
+          '<label class="field-label">Notițe despre '+escapeHtml(lead.name)+'</label>' +
+          '<textarea id="lead-notes-textarea" data-id="'+lead.id+'" placeholder="Ce ați vorbit, ce a zis, ce urmează…" style="min-height:84px;">'+escapeHtml(lead.callNotes||'')+'</textarea>' +
+        '</div>' +
+        '<div class="grid grid-1-2" style="margin-top:12px;">' +
+          '<div><label class="field-label">Link conversație (Instagram / TikTok)</label>' +
+            '<div class="flex gap-2">' +
+              '<input data-field="lead-igLink" data-id="'+lead.id+'" type="text" value="'+escapeAttr(lead.igLink||'')+'" placeholder="https://www.instagram.com/direct/t/..." class="flex-1" />' +
+              '<button data-action="open-instagram-dm" data-id="'+lead.id+'" class="btn btn-sm shrink-0" title="Deschide conversația" aria-label="Deschide conversația">'+icon('send','icon-sm')+'</button>' +
+            '</div>' +
+          '</div>' +
+          '<div><label class="field-label">De unde a venit</label><select data-field="lead-source" data-id="'+lead.id+'">'+leadSourceOptionsHtml(lead.source)+'</select></div>' +
+        '</div>' +
+        '<p class="eyebrow" style="margin:16px 0 0; padding-top:16px; border-top:1px solid var(--line);">Calificare</p>' +
         fieldsHtml +
         '<div class="mt-4" style="margin-top:16px; border-top:1px solid var(--line); padding-top:16px;">' +
           '<label class="field-label">📌 Follow-up — te alarmează indiferent de status</label>' +
@@ -7073,13 +7478,17 @@ function formatBackupStatus(){
 function syncOverlayHtml(){
   const pendingCount = Object.keys(pendingSaves).length;
   const backup = formatBackupStatus();
+  const canShare = canShareBackupFile();
   const statusBlock = pendingCount
     ? '<div class="card" style="border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.06);">' +
         '<p class="text-sm" style="color:#fca5a5; font-weight:600; margin-bottom:4px;">⚠ '+pendingCount+' modificare(ări) nesalvate pe acest dispozitiv</p>' +
-        '<p class="text-xs muted" style="margin-bottom:10px;">Datele sunt intacte în sesiunea curentă și reîncearcă automat la 20s — dar dacă închizi acum artifact-ul, riști să le pierzi. Reîncearcă manual sau fă un backup mai jos ca plasă de siguranță.</p>' +
+        '<p class="text-xs muted" style="margin-bottom:10px;">Datele sunt intacte cât ține aplicația deschisă și se reîncearcă automat la 20s — dar dacă o închizi acum, riști să le pierzi. Reîncearcă manual sau trimite/descarcă fișierul de mai jos ca plasă de siguranță.</p>' +
         '<button data-action="retry-save" class="btn btn-sm">'+icon('refresh','icon-sm')+'Reîncearcă salvarea acum</button>' +
       '</div>'
-    : '<div class="card" style="border-color:rgba(52,211,153,.25); background:rgba(52,211,153,.05);"><p class="text-sm good-text">✓ Toate datele sunt salvate pe acest dispozitiv</p></div>';
+    : '<div class="card" style="border-color:rgba(52,211,153,.25); background:rgba(52,211,153,.05); padding:12px 14px;">' +
+        '<p class="text-sm good-text">✓ Totul e salvat pe acest dispozitiv</p>' +
+        '<p class="text-xs '+(backup.stale?'':'mute3')+'" style="margin-top:3px;'+(backup.stale?' color:#fbbf24;':'')+'">'+(backup.stale?'⚠ ':'')+'Ultimul backup / transfer: <strong style="font-weight:600;">'+backup.text+'</strong>'+(backup.stale?' — trimite sau descarcă fișierul de mai jos, ca plasă de siguranță.':'')+'</p>' +
+      '</div>';
   const loadStatusBlock = loadFailedKeys.size
     ? '<div class="card" style="border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.06);">' +
         '<p class="text-sm" style="color:#fbbf24; font-weight:600; margin-bottom:4px;">⚠ '+loadFailedKeys.size+' categorie(i) de date nu au putut fi confirmate la ultima deschidere</p>' +
@@ -7087,64 +7496,80 @@ function syncOverlayHtml(){
         '<button data-action="retry-data-load" class="btn btn-sm"'+(dataLoadRetryInProgress?' disabled':'')+'>'+icon('refresh','icon-sm')+(dataLoadRetryInProgress?'Se reîncearcă…':'Reîncearcă citirea acum')+'</button>' +
       '</div>'
     : '';
-  const backupBlock = '<div class="card" style="'+(backup.stale ? 'border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.05);' : '')+'">' +
-      '<p class="text-sm" style="'+(backup.stale?'color:#fbbf24;':'color:var(--text-dim);')+'">'+(backup.stale?'⚠ ':'')+'Ultimul backup: <strong style="color:var(--text); font-weight:600;">'+backup.text+'</strong></p>' +
-      (backup.stale ? '<p class="text-xs muted mt-1" style="margin-top:4px;">Faci multe actualizări aplicației — recomandăm un backup rapid acum, ca plasă de siguranță înainte de următoarea modificare.</p>' : '') +
-    '</div>';
-  return '<div class="overlay-backdrop" data-action="close-sync-backdrop">' +
-    '<div class="overlay-panel">' +
-      '<div class="overlay-head">' +
-        '<p class="h2">Sincronizare între dispozitive</p>' +
-        '<button data-action="close-sync" class="icon-btn">'+icon('x','icon')+'</button>' +
+  const stepNo = (n) => '<span style="width:22px; height:22px; border-radius:50%; background:var(--accent); color:#0A0A0A; font-weight:800; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">'+n+'</span>';
+  const transferBlock =
+    '<div>' +
+      '<p class="eyebrow" style="margin-bottom:4px;">Mută datele pe alt dispozitiv</p>' +
+      '<p class="text-xs mute3" style="margin-bottom:12px;">Telefonul și calculatorul țin datele separat. Le muți cu un fișier — fără clipboard, fără copiat text.</p>' +
+      '<div class="card" style="padding:14px; margin-bottom:10px;">' +
+        '<div class="flex items-center gap-2" style="margin-bottom:10px;">'+stepNo(1)+'<p class="text-sm" style="font-weight:600;">Aici, pe dispozitivul cu datele noi</p></div>' +
+        (canShare
+          ? '<button data-action="share-backup-file" class="btn btn-primary w-full" style="justify-content:center; padding:12px;">'+icon('send','icon-sm')+'Trimite fișierul</button>' +
+            '<p class="text-xs mute3" style="margin-top:6px;">Se deschide meniul telefonului — alege WhatsApp (către tine), Drive, e-mail sau Quick Share.</p>' +
+            '<button data-action="export-data" class="btn btn-sm w-full" style="justify-content:center; margin-top:8px;">'+icon('cloud','icon-sm')+'sau doar descarcă-l pe acest dispozitiv</button>'
+          : '<button data-action="export-data" class="btn btn-primary w-full" style="justify-content:center; padding:12px;">'+icon('cloud','icon-sm')+'Descarcă fișierul</button>' +
+            '<p class="text-xs mute3" style="margin-top:6px;">Ajunge în Descărcări. Trimite-ți-l apoi (WhatsApp Web către tine, Drive, e-mail) ca să-l ai pe celălalt dispozitiv.</p>') +
       '</div>' +
-      '<div class="overlay-body flex-col gap-5" style="display:flex;">' +
-        statusBlock +
-        loadStatusBlock +
-        backupBlock +
-        '<div>' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Trimite datele către alt dispozitiv</p>' +
-          '<div class="flex-col gap-2" style="display:flex;">' +
-            '<button data-action="export-data" class="btn w-full" style="justify-content:flex-start;">'+icon('cloud','icon-sm')+'Descarcă fișier .json</button>' +
-            '<button data-action="copy-all-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Copiază tot în clipboard</button>' +
-          '</div>' +
+      '<div class="card" style="padding:14px;">' +
+        '<div class="flex items-center gap-2" style="margin-bottom:10px;">'+stepNo(2)+'<p class="text-sm" style="font-weight:600;">Pe celălalt dispozitiv, tot în Sync</p></div>' +
+        '<button data-action="import-data" class="btn w-full" style="justify-content:center; padding:12px;">'+icon('refresh','icon-sm')+'Alege fișierul primit</button>' +
+        '<p class="text-xs mute3" style="margin-top:6px;">Îți arăt din ce dată e și câte lead-uri conține, apoi confirmi. Înlocuiește datele de pe dispozitivul pe care imporți.<span class="pc-only-inline"> Pe calculator poți și să tragi fișierul oriunde peste aplicație.</span></p>' +
+        (appMeta.preImportAt
+          ? '<button data-action="restore-pre-import" class="btn btn-sm w-full" style="justify-content:center; margin-top:10px; border-color:rgba(251,191,36,.35); color:#fbbf24;">↩ Anulează ultimul import (revino la datele din '+(formatRoDateTime(appMeta.preImportAt)||'—')+')</button>'
+          : '') +
+      '</div>' +
+    '</div>';
+  const advancedBlock =
+    '<div style="border-top:1px solid var(--line); padding-top:14px;">' +
+      '<button data-action="toggle-sync-advanced" class="flex items-center justify-between w-full" style="background:none; border:none; padding:0; color:var(--text-dim); text-align:left;">' +
+        '<span class="eyebrow" style="margin:0;">Alte metode — copiere ca text</span>' +
+        '<span style="transform:rotate('+(syncAdvancedOpen?'180':'0')+'deg); display:inline-flex;">'+icon('chevronDown','icon-sm')+'</span>' +
+      '</button>' +
+      (syncAdvancedOpen ? (
+        '<div class="flex-col gap-2" style="display:flex; margin-top:12px;">' +
+          '<p class="text-xs mute3">Doar dacă fișierul nu merge. Clipboard-ul telefonului și cel al calculatorului sunt separate — textul copiat trebuie dus manual (mesaj către tine, notiță), iar pe drum se poate strica.</p>' +
+          '<button data-action="copy-all-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Copiază toate datele ca text</button>' +
           (manualCopyText
-            ? '<div style="margin-top:10px;">' +
-                '<p class="text-xs" style="color:#fbbf24; margin-bottom:6px;">Copierea automată nu a mers aici — selectează tot textul de mai jos și copiază-l manual (Ctrl/Cmd+C, sau ține apăsat → Copiază pe telefon):</p>' +
+            ? '<div>' +
+                '<p class="text-xs" style="color:#fbbf24; margin-bottom:6px;">Copierea automată nu a mers aici — selectează tot textul de mai jos și copiază-l manual:</p>' +
                 '<textarea id="manual-copy-text" readonly rows="4" style="width:100%; font-family:monospace; font-size:11px;" onfocus="this.select()">'+escapeHtml(manualCopyText)+'</textarea>' +
                 '<button data-action="select-manual-copy-text" class="btn btn-sm w-full mt-2" style="justify-content:center; margin-top:8px;">Selectează tot textul</button>' +
               '</div>'
             : '') +
-          '<p class="text-xs mute3 mt-2">Copiază, apoi lipește într-un mesaj WhatsApp, o notă din Drive/iCloud etc. Pe celălalt dispozitiv, deschide aici din nou și folosește "Lipește din text" mai jos (cea mai sigură metodă).</p>' +
-        '</div>' +
-        '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Primește date de pe alt dispozitiv</p>' +
-          '<div class="flex-col gap-2" style="display:flex; margin-bottom:10px;">' +
-            '<label class="text-xs mute3">Lipește din text (cea mai sigură metodă — funcționează peste tot, chiar și aici în preview)</label>' +
-            '<textarea id="manual-import-text" rows="4" placeholder="Lipește aici textul copiat de pe celălalt dispozitiv…" style="width:100%; font-family:monospace; font-size:12px;"></textarea>' +
-            '<button data-action="import-manual-text" class="btn w-full" style="justify-content:center;">'+icon('refresh','icon-sm')+'Importă din textul lipit</button>' +
-          '</div>' +
-          '<div class="flex-col gap-2" style="display:flex;">' +
-            '<button data-action="paste-import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('clipboard','icon-sm')+'Lipește direct din clipboard (nu merge peste tot)</button>' +
-            '<button data-action="import-data" class="btn w-full" style="justify-content:flex-start;">'+icon('refresh','icon-sm')+'Importă din fișier</button>' +
-          '</div>' +
-          '<p class="text-xs mute3 mt-2">Toate trei înlocuiesc complet datele curente din acest dispozitiv.</p>' +
-        '</div>' +
-        '<div style="border-top:1px solid var(--line); padding-top:16px;">' +
-          '<p class="eyebrow" style="margin-bottom:8px;">Auto-sync la un folder (experimental)</p>' +
-          (isFileSystemAccessSupported()
-            ? (syncFileHandle
-                ? (syncFileNeedsReconnect
-                    ? '<p class="text-xs" style="color:#fbbf24; margin-bottom:8px;">⚠ Conectat, dar browserul cere reconfirmare după refresh (normal, din motive de securitate — nu s-a pierdut nimic).</p>' +
-                      '<button data-action="reconnect-sync-file" class="btn btn-sm btn-primary w-full" style="justify-content:center;">'+icon('cloud','icon-sm')+'Reconectează cu un tap</button>'
-                    : '<p class="text-xs good-text" style="margin-bottom:8px;">✓ Activ — rămâne conectat și după refresh. Scrie automat aici la fiecare modificare, și citește automat de aici când redeschizi aplicația sau te întorci la ea (plus verificare din 90 în 90 de secunde cât stă deschisă).</p>' +
-                      '<div class="flex gap-2">' +
-                        '<button data-action="check-sync-file-now" class="btn btn-sm flex-1" style="justify-content:center;">'+icon('refresh','icon-sm')+'Verifică acum</button>' +
-                        '<button data-action="disconnect-sync-file" class="btn btn-sm flex-1" style="justify-content:center;">Oprește</button>' +
-                      '</div>')
-                : '<button data-action="choose-sync-file" class="btn w-full" style="justify-content:flex-start;">'+icon('cloud','icon-sm')+'Alege fișierul de sincronizat</button>' +
-                  '<p class="text-xs mute3 mt-2">Alege (sau creează) un fișier într-un folder sincronizat local pe acest calculator — Google Drive, iCloud sau OneDrive, poți să-l numești și „Claude" dacă vrei. Pe fiecare dispozitiv alegi ACELAȘI fișier din acel folder — primul dispozitiv îl creează, următoarele îl găsesc deja cu date și le preia automat, în loc să le suprascrie. Rămâne conectat și după refresh (poate cere un singur tap de reconfirmare — regulă de securitate a browserului, nu pierdere de date).</p>')
-            : '<p class="text-xs mute3">Nedisponibil în acest browser/dispozitiv — funcționează doar în Chrome sau Edge pe desktop, în afara unei ferestre de preview/iframe. Pe telefon, în Safari, în alte browsere, sau într-un preview, folosește Export, Copiază în clipboard, sau Lipește din text mai jos — acelea funcționează peste tot, doar că trebuie făcute manual pe fiecare dispozitiv.</p>') +
-        '</div>' +
+          '<textarea id="manual-import-text" rows="3" placeholder="Pe celălalt dispozitiv: lipește aici textul copiat…" style="width:100%; font-family:monospace; font-size:12px; margin-top:6px;"></textarea>' +
+          '<button data-action="import-manual-text" class="btn w-full" style="justify-content:center;">'+icon('refresh','icon-sm')+'Importă din textul lipit</button>' +
+          '<button data-action="paste-import-data" class="btn btn-sm w-full" style="justify-content:center;">'+icon('clipboard','icon-sm')+'sau citește direct din clipboard</button>' +
+        '</div>'
+      ) : '') +
+    '</div>';
+  const fileSyncBlock = isFileSystemAccessSupported()
+    ? '<div style="border-top:1px solid var(--line); padding-top:14px;">' +
+        '<p class="eyebrow" style="margin-bottom:8px;">Auto-sync la un fișier (doar calculator, experimental)</p>' +
+        (syncFileHandle
+          ? (syncFileNeedsReconnect
+              ? '<p class="text-xs" style="color:#fbbf24; margin-bottom:8px;">⚠ Conectat, dar browserul cere reconfirmare după refresh (normal, din motive de securitate — nu s-a pierdut nimic).</p>' +
+                '<button data-action="reconnect-sync-file" class="btn btn-sm btn-primary w-full" style="justify-content:center;">'+icon('cloud','icon-sm')+'Reconectează cu un tap</button>'
+              : '<p class="text-xs good-text" style="margin-bottom:8px;">✓ Activ — scrie automat în fișier la fiecare modificare și citește din el când redeschizi aplicația sau te întorci la ea (plus o verificare la 90 de secunde).</p>' +
+                '<div class="flex gap-2">' +
+                  '<button data-action="check-sync-file-now" class="btn btn-sm flex-1" style="justify-content:center;">'+icon('refresh','icon-sm')+'Verifică acum</button>' +
+                  '<button data-action="disconnect-sync-file" class="btn btn-sm flex-1" style="justify-content:center;">Oprește</button>' +
+                '</div>')
+          : '<button data-action="choose-sync-file" class="btn btn-sm w-full" style="justify-content:center;">'+icon('cloud','icon-sm')+'Alege fișierul de sincronizat</button>' +
+            '<p class="text-xs mute3 mt-2">Ține o copie mereu la zi într-un fișier de pe acest calculator (de exemplu într-un folder Google Drive / OneDrive). Util ca backup automat; telefonul nu poate scrie în el — pentru telefon folosește pașii 1 și 2 de mai sus.</p>') +
+      '</div>'
+    : '';
+  return '<div class="overlay-backdrop" data-action="close-sync-backdrop">' +
+    '<div class="overlay-panel">' +
+      '<div class="overlay-head">' +
+        '<p class="h2">Sync & Backup</p>' +
+        '<button data-action="close-sync" class="icon-btn" aria-label="Închide">'+icon('x','icon')+'</button>' +
+      '</div>' +
+      '<div class="overlay-body flex-col gap-4" style="display:flex;">' +
+        statusBlock +
+        loadStatusBlock +
+        transferBlock +
+        advancedBlock +
+        fileSyncBlock +
       '</div>' +
     '</div>' +
   '</div>';
@@ -7222,6 +7647,7 @@ function onContentClick(e){
   const action = el.dataset.action;
   if (action === 'toggle-task') toggleTask(el.dataset.cat, el.dataset.id);
   else if (action === 'add-task') addTask(el.dataset.cat);
+  else if (action === 'add-task-once') addTask(el.dataset.cat, true);
   else if (action === 'edit-task') startEditTask(el.dataset.cat, el.dataset.id);
   else if (action === 'save-task') saveEditTask(el.dataset.cat, el.dataset.id);
   else if (action === 'cancel-task') cancelEditTask();
@@ -7396,6 +7822,13 @@ function onContentClick(e){
   }
   else if (action === 'remove-payment') removePayment(el.dataset.lead, el.dataset.payment);
   else if (action === 'open-sync') openSync();
+  else if (action === 'open-more') openMoreMenu();
+  else if (action === 'close-more') closeMoreMenu();
+  else if (action === 'close-more-backdrop') { if (e.target === el) closeMoreMenu(); }
+  else if (action === 'more-goto') { moreMenuOpen = false; renderOverlay(); switchTab(el.dataset.tab); }
+  else if (action === 'more-notes') { moreMenuOpen = false; openNotes(); }
+  else if (action === 'more-sync') { moreMenuOpen = false; openSync(); }
+  else if (action === 'complete-followup') completeFollowup(el.dataset.id);
   else if (action === 'retry-save') { flushPendingSaves().then(() => renderOverlay()); }
   else if (action === 'retry-data-load') manualRetryDataLoad();
   else if (action === 'choose-sync-file') chooseSyncFile();
@@ -7405,6 +7838,9 @@ function onContentClick(e){
   else if (action === 'close-sync') closeSync();
   else if (action === 'close-sync-backdrop') { if (e.target === el) closeSync(); }
   else if (action === 'copy-all-data') copyDataToClipboard();
+  else if (action === 'share-backup-file') shareBackupFile();
+  else if (action === 'restore-pre-import') restorePreImportSnapshot();
+  else if (action === 'toggle-sync-advanced') { syncAdvancedOpen = !syncAdvancedOpen; renderOverlay(); }
   else if (action === 'select-manual-copy-text') selectManualCopyText();
   else if (action === 'paste-import-data') pasteDataFromClipboard();
   else if (action === 'import-manual-text') importDataFromManualText();
@@ -7559,6 +7995,13 @@ function onContentChange(e){
     updateLinkDeconstructField(linkDeconEl.dataset.linkdecon, linkDeconEl.dataset.deconfield, linkDeconEl.value);
     return;
   }
+  if (e.target && e.target.id === 'lead-notes-textarea') {
+    clearTimeout(leadNotesSaveTimer);
+    updateCallNotes(e.target.dataset.id, e.target.value);
+    if (activeTab === 'crm') renderCRM(); // refresh the notes preview on the card behind the fișă
+    else if (activeTab === 'dashboard') renderDashboard();
+    return;
+  }
   if (e.target && e.target.id === 'call-notes-textarea') {
     updateCallNotes(e.target.dataset.id, e.target.value);
     return;
@@ -7575,6 +8018,7 @@ function onContentInput(e){
   if (e.target && e.target.id === 'lead-search-input') { leadSearch = e.target.value; preserveCursor('lead-search-input', renderCRM); }
   else if (e.target && e.target.id === 'savedlinks-search-input') { linksHubSearch = e.target.value; preserveCursor('savedlinks-search-input', renderLinksHub); }
   else if (e.target && e.target.id === 'notes-textarea') { onNotesInput(e.target.value); }
+  else if (e.target && e.target.id === 'lead-notes-textarea') { onLeadNotesInput(e.target.dataset.id, e.target.value); }
   else if (e.target && e.target.id === 'link-search-input') { linkSearch = e.target.value; preserveCursor('link-search-input', renderLibrary); }
   else if (e.target && e.target.id === 'account-search-input') { accountSearch = e.target.value; preserveCursor('account-search-input', renderLibrary); }
   else if (e.target && e.target.id === 'edit-idea-input') { updateEditIdeaTagsFromText(e.target.value); preserveCursor('edit-idea-input', renderCalendar); }
@@ -7601,7 +8045,7 @@ function onGlobalBlur(e){
    INIT
 ========================================================= */
 function anyOverlayOpen(){
-  return !!(notesOpen || paymentsOpenFor || qualifyOpenFor || clientSummaryFor || outreachPickerFor || postDetailFor || snippetOpenFor || syncOpen || filmingMode || fabMenuOpen || leadQuickMenuFor || ctaPickerOpen);
+  return !!(notesOpen || paymentsOpenFor || qualifyOpenFor || clientSummaryFor || outreachPickerFor || postDetailFor || snippetOpenFor || syncOpen || moreMenuOpen || filmingMode || fabMenuOpen || leadQuickMenuFor || ctaPickerOpen);
 }
 function onGlobalKeydown(e){
   if (e.key === 'Escape') {
@@ -7613,6 +8057,7 @@ function onGlobalKeydown(e){
     if (postDetailFor) { closePostDetail(); return; }
     if (snippetOpenFor) { closeSnippet(); return; }
     if (syncOpen) { closeSync(); return; }
+    if (moreMenuOpen) { closeMoreMenu(); return; }
     if (filmingMode) { closeFilmingMode(); return; }
     if (fabMenuOpen) { closeFabMenu(); return; }
     if (leadQuickMenuFor) { closeLeadQuickMenu(); return; }
@@ -7694,6 +8139,10 @@ function bindEventsOnce(){
   document.addEventListener('touchmove', onSwipeTouchMove, { passive: false });
   document.addEventListener('touchend', onSwipeTouchEnd);
   window.addEventListener('beforeunload', onBeforeUnload);
+  document.addEventListener('dragenter', onDragEnter);
+  document.addEventListener('dragover', onDragOver);
+  document.addEventListener('dragleave', onDragLeave);
+  document.addEventListener('drop', onDrop);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPendingSaves();
     else if (document.visibilityState === 'visible') { readSyncFile(true); } // just came back — pull in whatever another device may have written meanwhile
@@ -7778,6 +8227,7 @@ async function init(){
   if (qualifyConfig) {
     QUALIFY_FIELDS = JSON.parse(JSON.stringify(DEFAULT_QUALIFY_FIELDS));
     Object.keys(qualifyConfig).forEach(k => { QUALIFY_FIELDS[k] = qualifyConfig[k]; });
+    fixQualifyLabelTypos();
   }
   state.streak = streak || { count: 0, lastCompletedDate: null };
   state.ads = ads || { monthlyBudget: 0 };
@@ -7816,7 +8266,7 @@ async function init(){
     state.checklist = {
       date: today,
       checked: {},
-      categories: (checklist && checklist.categories) || seedChecklistCategories(),
+      categories: carryOverChecklistCategories(checklist),
     };
     saveKey('checklist', state.checklist);
   } else {
@@ -7833,6 +8283,16 @@ async function init(){
   // template group open by default there.
   if (window.innerWidth < 768) {
     (state.resources.groups || []).slice(1).forEach(g => collapsedResourceGroups.add(g.id));
+  }
+
+  // Baseline for the "this backup is older than your data here" warning: the
+  // newest real save recorded on this device, read back from the stored
+  // stamps (not "now" — the app merely being opened is not a change).
+  lastLocalChangeAt = CHANGE_TRACKED_KEYS.reduce((max, k) => { const rec = lsGet(k); return rec && rec.t > max ? rec.t : max; }, 0);
+  if (appMeta.importedStampAt && appMeta.importedDataAsOf && lastLocalChangeAt <= appMeta.importedStampAt + 3000) {
+    // Nothing was saved here since the last import — the data is as old as that backup.
+    const asOf = new Date(appMeta.importedDataAsOf).getTime();
+    if (!isNaN(asOf)) lastLocalChangeAt = asOf;
   }
 
   bindEventsOnce();
@@ -7867,7 +8327,7 @@ function startDayRolloverWatcher(){
     lastKnownDate = today;
     checkStreakRollover(today);
     if (state.checklist.date !== today) {
-      state.checklist = { date: today, checked: {}, categories: state.checklist.categories };
+      state.checklist = { date: today, checked: {}, categories: carryOverChecklistCategories(state.checklist) };
       saveKey('checklist', state.checklist);
     }
     saveKey('streak', state.streak);
