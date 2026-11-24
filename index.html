@@ -343,7 +343,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v14</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v15</p>
       </div>
     </div>
   </aside>
@@ -1099,36 +1099,61 @@ function lsGet(key){
 }
 function lsDelete(key){ try { localStorage.removeItem(LS_PREFIX + key); } catch(e){} }
 
+// Safe mode (?safe=1): skips IndexedDB completely and runs on localStorage
+// only — the way out if a phone's IndexedDB hangs and the app never opens.
+const SAFE_MODE = /[?&]safe=1/.test(location.search);
+let dataDbPromise = null, idbDisabled = false;
+function withTimeout(p, ms, fallback){
+  return Promise.race([p, new Promise(res => setTimeout(() => res(fallback), ms))]);
+}
+// One shared connection (it used to open a new, never-closed one per call),
+// and it can no longer wait forever: if IndexedDB doesn't answer in 3s it is
+// skipped for this session and the app runs on localStorage, which is the
+// primary store anyway (synchronous, written on every save).
 function openDataDB(){
-  return new Promise((resolve, reject) => {
-    if (!window.indexedDB) { reject(new Error('no idb')); return; }
-    const req = indexedDB.open(IDB_DB, 1);
+  if (idbDisabled || SAFE_MODE || !window.indexedDB) return Promise.reject(new Error('no idb'));
+  if (dataDbPromise) return dataDbPromise;
+  dataDbPromise = new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(IDB_DB, 1); } catch(e){ reject(e); return; }
+    const timer = setTimeout(() => { idbDisabled = true; reject(new Error('idb timeout')); }, 3000);
     req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE); };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      clearTimeout(timer);
+      const db = req.result;
+      db.onversionchange = () => { try { db.close(); } catch(e){} dataDbPromise = null; };
+      db.onclose = () => { dataDbPromise = null; };
+      resolve(db);
+    };
+    req.onerror = () => { clearTimeout(timer); reject(req.error); };
+    req.onblocked = () => { clearTimeout(timer); idbDisabled = true; reject(new Error('idb blocked')); };
   });
+  dataDbPromise.catch(() => { dataDbPromise = null; });
+  return dataDbPromise;
 }
 async function idbSet(key, stamped){
   try {
     const db = await openDataDB();
-    await new Promise((resolve, reject) => {
+    await withTimeout(new Promise((resolve, reject) => {
       const tx = db.transaction(IDB_STORE, 'readwrite');
       tx.objectStore(IDB_STORE).put(stamped, key);
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
-    });
+      tx.onabort = () => reject(tx.error || new Error('aborted'));
+    }), 5000, null);
     return true;
   } catch(e){ return false; }
 }
 async function idbGet(key){
   try {
     const db = await openDataDB();
-    return await new Promise((resolve) => {
+    return await withTimeout(new Promise((resolve) => {
       const tx = db.transaction(IDB_STORE, 'readonly');
       const req = tx.objectStore(IDB_STORE).get(key);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => resolve(null);
-    });
+      tx.onabort = () => resolve(null);
+    }), 3000, null);
   } catch(e){ return null; }
 }
 async function idbDelete(key){
@@ -8424,6 +8449,7 @@ async function init(){
 
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  if (SAFE_MODE) toast('Mod sigur: aplicația rulează fără IndexedDB. Datele tale din telefon sunt intacte.');
 
   if (!ANY_PERSISTENCE) toast('Persistență indisponibilă în acest mediu — datele nu se vor salva la refresh.', 'error');
 
@@ -8459,7 +8485,26 @@ function startDayRolloverWatcher(){
   }, 60000);
 }
 
-init();
+// If start-up ever stalls or throws, say so on screen (with the reason and a
+// way out) instead of spinning forever with no explanation.
+let initFinished = false;
+function showLoaderProblem(msg){
+  const el = document.getElementById('loading');
+  if (!el || el.classList.contains('hidden')) return;
+  el.innerHTML = '<div style="padding:24px; text-align:center; max-width:380px;">' +
+    '<p style="font-size:34px; line-height:1; margin-bottom:12px;">⚠️</p>' +
+    '<p style="font-weight:700; font-size:17px; margin-bottom:8px;">Aplicația nu a pornit</p>' +
+    '<p style="font-size:14px; opacity:.75; margin-bottom:14px; line-height:1.5;">Datele tale nu au fost șterse. Încearcă mai întâi „Încearcă din nou”. Dacă tot nu pornește, „Pornește în mod sigur” ocolește partea care se blochează.</p>' +
+    '<button onclick="location.reload()" style="width:100%; padding:14px; border-radius:12px; border:0; background:#F97316; color:#0A0A0A; font-weight:700; font-size:16px; margin-bottom:10px;">Încearcă din nou</button>' +
+    '<button onclick="location.href=location.pathname+\'?safe=1\'" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,.2); background:transparent; color:inherit; font-weight:600; font-size:16px;">Pornește în mod sigur</button>' +
+    '<p style="font-size:11px; opacity:.45; margin-top:14px; word-break:break-word;">' + String(msg).replace(/[<>&]/g, '') + '</p>' +
+  '</div>';
+}
+setTimeout(() => { if (!initFinished) showLoaderProblem('Pornirea durează neobișnuit de mult (peste 10 secunde).'); }, 10000);
+init().then(() => { initFinished = true; }).catch(e => {
+  console.error('init failed', e);
+  showLoaderProblem('Eroare la pornire: ' + ((e && e.message) || e));
+});
 
 })();
 </script>
