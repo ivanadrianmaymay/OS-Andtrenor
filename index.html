@@ -4,6 +4,72 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>OS Antrenor — ivanadrian.fit</title>
+<script>
+/* Boot guard — deliberately separate from the app script and plain ES5, so it
+   still runs if the app script fails to parse, throws on load or hangs.
+   If the app hasn't shown its UI within 8s it first retries once in safe
+   mode (no IndexedDB), then shows what went wrong with ways out. */
+(function(){
+  var BUILD = 'v16';
+  window.__osaBuild = BUILD;
+  window.__osaBooted = false;
+  var errs = [];
+  function note(x){ try { errs.push(String(x).slice(0, 220)); } catch(e){} }
+  window.addEventListener('error', function(e){ note((e && e.message || 'error') + ' @' + (e && e.lineno) + ':' + (e && e.colno)); });
+  window.addEventListener('unhandledrejection', function(e){ note('promise: ' + (e && e.reason && (e.reason.message || e.reason))); });
+  function esc(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function bust(extra){ return location.pathname + '?v=' + Date.now() + (extra || ''); }
+  var KEYS = ['goal','checklist','calendar','leads','content','resources','activity','notes','links','trackedAccounts','savedLinks','navOrder','qualifyConfig','settings','streak','ads','testimonials','shotList','brand','gamification','storyVault'];
+  window.__osaAction = function(a){
+    try {
+      if (a === 'retry') { location.href = bust(); }
+      else if (a === 'safe') { location.href = location.pathname + '?safe=1&v=' + Date.now(); }
+      else if (a === 'cache') {
+        var jobs = [];
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); }));
+        if (window.caches && caches.keys) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }));
+        Promise.all(jobs).then(function(){ location.href = bust(); }, function(){ location.href = bust(); });
+      }
+      else if (a === 'copy') {
+        var data = {};
+        KEYS.forEach(function(k){ try { var raw = localStorage.getItem('osa_' + k); if (raw) { var o = JSON.parse(raw); if (o && 'v' in o) data[k] = o.v; } } catch(e){} });
+        var payload = { exportedAt: new Date().toISOString(), app: 'os-antrenor', version: 5, data: data };
+        var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob), el = document.createElement('a');
+        el.href = url; el.download = 'os-antrenor-copie-' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(el); el.click(); document.body.removeChild(el);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+      }
+    } catch(e){ note('action ' + a + ': ' + e); }
+  };
+  window.__osaProblem = function(msg){
+    if (window.__osaBooted) return;
+    var el = document.getElementById('loading'); if (!el) return;
+    var btn = 'width:100%; padding:13px; border-radius:12px; font-weight:600; font-size:15px; margin-bottom:9px; ';
+    el.innerHTML = '<div style="padding:22px; text-align:center; max-width:380px;">' +
+      '<p style="font-size:32px; line-height:1; margin-bottom:10px;">⚠️</p>' +
+      '<p style="font-weight:700; font-size:17px; margin-bottom:6px;">Aplicația nu a pornit</p>' +
+      '<p style="font-size:13px; opacity:.75; margin-bottom:14px; line-height:1.5;">Datele tale nu au fost șterse. Încearcă butoanele de sus în jos.</p>' +
+      '<button onclick="__osaAction(\'retry\')" style="' + btn + 'border:0; background:#F97316; color:#0A0A0A;">Încearcă din nou</button>' +
+      '<button onclick="__osaAction(\'cache\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Șterge memoria temporară și reîncarcă</button>' +
+      '<button onclick="__osaAction(\'safe\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Pornește în mod sigur</button>' +
+      '<button onclick="__osaAction(\'copy\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Descarcă o copie a datelor</button>' +
+      '<p style="font-size:11px; opacity:.5; margin-top:12px; line-height:1.5; word-break:break-word; text-align:left;">Versiune: ' + BUILD + '<br>' + esc(msg || '') + (errs.length ? '<br>' + errs.map(esc).join('<br>') : '') + '</p>' +
+    '</div>';
+  };
+  setTimeout(function(){
+    if (window.__osaBooted) return;
+    var safe = /[?&]safe=1/.test(location.search), tried = false;
+    try { tried = sessionStorage.getItem('osa_autosafe') === '1'; } catch(e){}
+    if (!safe && !tried) {
+      try { sessionStorage.setItem('osa_autosafe', '1'); } catch(e){}
+      location.replace(location.pathname + '?safe=1&v=' + Date.now());
+      return;
+    }
+    window.__osaProblem('Pornirea a durat peste 8 secunde.');
+  }, 8000);
+})();
+</script>
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -308,7 +374,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor…</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v16</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -343,7 +409,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v15</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v16</p>
       </div>
     </div>
   </aside>
@@ -397,7 +463,10 @@
 /* =========================================================
    CONSTANTS — used only to SEED data on first run.
 ========================================================= */
-const STORAGE_OK = !!(window.storage && window.storage.get && window.storage.set);
+// Safe mode (?safe=1): skips IndexedDB and the artifact bridge completely and
+// runs on localStorage only — the way out if a device's storage hangs.
+const SAFE_MODE = /[?&]safe=1/.test(location.search);
+const STORAGE_OK = !SAFE_MODE && !!(window.storage && window.storage.get && window.storage.set);
 const LOCAL_OK = (() => {
   try { const k = '__osa_test__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
   catch(e){ return false; }
@@ -1099,9 +1168,6 @@ function lsGet(key){
 }
 function lsDelete(key){ try { localStorage.removeItem(LS_PREFIX + key); } catch(e){} }
 
-// Safe mode (?safe=1): skips IndexedDB completely and runs on localStorage
-// only — the way out if a phone's IndexedDB hangs and the app never opens.
-const SAFE_MODE = /[?&]safe=1/.test(location.search);
 let dataDbPromise = null, idbDisabled = false;
 function withTimeout(p, ms, fallback){
   return Promise.race([p, new Promise(res => setTimeout(() => res(fallback), ms))]);
@@ -1180,7 +1246,10 @@ async function loadKey(key, fallback){
     let got = false;
     for (let attempt = 0; attempt <= backoffs.length && !got; attempt++) {
       try {
-        const r = await window.storage.get(key, false);
+        const r = await Promise.race([
+          window.storage.get(key, false),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('bridge timeout')), 2000)),
+        ]);
         got = true;
         if (r && r.value) {
           const parsed = JSON.parse(r.value);
@@ -6183,9 +6252,10 @@ function filteredTrackedAccounts(){
   }
   return accounts;
 }
-function checkedToday(a){ return !!(a.lastCheckedAt && dateToISO(new Date(a.lastCheckedAt)) === todayISO()); }
+function checkedTs(a){ const t = a && a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0; return isFinite(t) ? t : 0; }
+function checkedToday(a){ const t = checkedTs(a); return !!t && dateToISO(new Date(t)) === todayISO(); }
 function browseOrder(list){
-  return list.slice().sort((a,b) => (a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0) - (b.lastCheckedAt ? new Date(b.lastCheckedAt).getTime() : 0));
+  return list.slice().sort((a,b) => checkedTs(a) - checkedTs(b));
 }
 function startBrowse(){
   const pool = filteredTrackedAccounts();
@@ -8449,7 +8519,14 @@ async function init(){
 
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  if (SAFE_MODE) toast('Mod sigur: aplicația rulează fără IndexedDB. Datele tale din telefon sunt intacte.');
+  window.__osaBooted = true;
+  if (SAFE_MODE) {
+    let hasLocal = false;
+    try { hasLocal = Object.keys(localStorage).some(k => k.indexOf(LS_PREFIX) === 0); } catch(e){}
+    toast(hasLocal
+      ? 'Mod sigur: rulează fără IndexedDB. Datele tale sunt intacte.'
+      : 'Mod sigur: nu găsesc datele locale aici. Nu salva nimic — redeschide aplicația normal.', hasLocal ? undefined : 'error');
+  }
 
   if (!ANY_PERSISTENCE) toast('Persistență indisponibilă în acest mediu — datele nu se vor salva la refresh.', 'error');
 
@@ -8485,25 +8562,9 @@ function startDayRolloverWatcher(){
   }, 60000);
 }
 
-// If start-up ever stalls or throws, say so on screen (with the reason and a
-// way out) instead of spinning forever with no explanation.
-let initFinished = false;
-function showLoaderProblem(msg){
-  const el = document.getElementById('loading');
-  if (!el || el.classList.contains('hidden')) return;
-  el.innerHTML = '<div style="padding:24px; text-align:center; max-width:380px;">' +
-    '<p style="font-size:34px; line-height:1; margin-bottom:12px;">⚠️</p>' +
-    '<p style="font-weight:700; font-size:17px; margin-bottom:8px;">Aplicația nu a pornit</p>' +
-    '<p style="font-size:14px; opacity:.75; margin-bottom:14px; line-height:1.5;">Datele tale nu au fost șterse. Încearcă mai întâi „Încearcă din nou”. Dacă tot nu pornește, „Pornește în mod sigur” ocolește partea care se blochează.</p>' +
-    '<button onclick="location.reload()" style="width:100%; padding:14px; border-radius:12px; border:0; background:#F97316; color:#0A0A0A; font-weight:700; font-size:16px; margin-bottom:10px;">Încearcă din nou</button>' +
-    '<button onclick="location.href=location.pathname+\'?safe=1\'" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,.2); background:transparent; color:inherit; font-weight:600; font-size:16px;">Pornește în mod sigur</button>' +
-    '<p style="font-size:11px; opacity:.45; margin-top:14px; word-break:break-word;">' + String(msg).replace(/[<>&]/g, '') + '</p>' +
-  '</div>';
-}
-setTimeout(() => { if (!initFinished) showLoaderProblem('Pornirea durează neobișnuit de mult (peste 10 secunde).'); }, 10000);
-init().then(() => { initFinished = true; }).catch(e => {
+init().catch(e => {
   console.error('init failed', e);
-  showLoaderProblem('Eroare la pornire: ' + ((e && e.message) || e));
+  if (window.__osaProblem) window.__osaProblem('Eroare la pornire: ' + ((e && e.message) || e));
 });
 
 })();
