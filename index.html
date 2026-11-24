@@ -10,7 +10,7 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v18';
+  var BUILD = 'v19';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
   window.__osaPending = [];
@@ -250,6 +250,45 @@
   .row-actions .icon-btn:hover{opacity:1;}
 
   /* calendar */
+  /* v19 — Content: day strip + single day panel, section chips */
+  .sec-nav{display:flex; gap:8px; overflow-x:auto; padding:2px 0 4px; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .sec-nav::-webkit-scrollbar{display:none;}
+  .sec-chip{flex:1 0 auto; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:11px 14px; border-radius:12px; border:1px solid var(--line); background:var(--elevated); color:var(--text-dim); font-size:14px; font-weight:600; white-space:nowrap;}
+  .sec-chip.sel{background:var(--accent-soft); border-color:var(--accent-border); color:var(--text);}
+  .sec-chip .cnt{font-size:11px; font-weight:700; opacity:.7;}
+  .day-strip{display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .day-strip::-webkit-scrollbar{display:none;}
+  .day-chip{flex:0 0 58px; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px 7px; border-radius:14px; border:1px solid var(--line); background:var(--elevated); color:var(--text-dim);}
+  .day-chip .dc-name{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; opacity:.8;}
+  .day-chip .dc-num{font-size:18px; font-weight:800; line-height:1.15;}
+  .day-chip .dc-dots{display:flex; gap:3px; height:6px; align-items:center;}
+  .day-chip .dc-dots i{display:block; width:6px; height:6px; border-radius:50%;}
+  .day-chip.today:not(.sel){border-color:var(--accent-border); color:var(--text);}
+  .day-chip.sel{background:var(--accent); border-color:var(--accent); color:#0A0A0A;}
+  .day-solo .day-col{flex:none; width:100%;}
+  details.more-actions{margin-top:8px; border-top:1px solid var(--line); padding-top:6px;}
+  details.more-actions > summary{list-style:none; cursor:pointer; font-size:12px; color:var(--text-mute); padding:6px 2px; user-select:none;}
+  details.more-actions > summary::-webkit-details-marker{display:none;}
+  /* v19 — Conturi urmărite: compact list */
+  .chip-row{display:flex; gap:8px; overflow-x:auto; padding:2px 0 4px; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .chip-row::-webkit-scrollbar{display:none;}
+  .chip-row .status-pill{flex:0 0 auto; white-space:nowrap;}
+  .seg{display:flex; gap:4px; background:rgba(255,255,255,.05); border-radius:12px; padding:4px;}
+  .seg button{flex:1; border:0; background:none; color:var(--text-dim); font-size:13px; font-weight:600; padding:9px 6px; border-radius:9px;}
+  .seg button.sel{background:var(--accent); color:#0A0A0A;}
+  .acc-list{display:grid; gap:8px; grid-template-columns:1fr;}
+  @media (min-width:900px){ .acc-list{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));} .acc-item.open{grid-column:1/-1;} }
+  .acc-item{background:var(--elevated); border:1px solid var(--line); border-radius:14px; min-width:0;}
+  .acc-item.open{border-color:var(--accent-border);}
+  .acc-row{display:flex; align-items:center; gap:12px; padding:10px 10px 10px 12px;}
+  .acc-av{flex:0 0 46px; width:46px; height:46px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,.06); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--text-faint);}
+  .acc-av img{width:100%; height:100%; object-fit:cover; display:block;}
+  .acc-main{flex:1; min-width:0; cursor:pointer; padding:2px 0;}
+  .acc-handle{font-size:15px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .acc-meta{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:3px 0 0; font-size:12px; color:var(--text-mute);}
+  .acc-st.ok{color:#34D399; font-weight:600;} .acc-st.late{color:#FBBF24; font-weight:600;} .acc-st.never{color:var(--text-mute);}
+  .acc-open{flex:0 0 auto; min-width:48px; height:46px; border-radius:12px; border:1px solid var(--accent-border); background:var(--accent-soft); color:var(--text); display:inline-flex; align-items:center; justify-content:center; gap:6px; font-size:13px; font-weight:700; padding:0 12px;}
+  .acc-detail{padding:2px 12px 14px; border-top:1px solid var(--line);}
   .week-row{display:flex; gap:14px; overflow-x:auto; padding-bottom:8px; -webkit-overflow-scrolling:touch; min-width:0; width:100%;}
   .day-col{flex:0 0 264px; background:var(--elevated); border:1px solid var(--line); border-radius:14px; padding:16px;}
   .day-col.today{border-color:var(--accent-border);}
@@ -384,7 +423,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v18</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v19</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -419,7 +458,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v18</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v19</p>
       </div>
     </div>
   </aside>
@@ -987,6 +1026,10 @@ let libraryView = 'materials'; // 'materials' | 'accounts' — the two Inspiraț
 let accountCategoryFilter = [];
 let accountSearch = '';
 let editAccountId = null;
+let accountView = 'todo';   // 'todo' | 'all' | 'done'
+let accountSort = 'oldest'; // 'oldest' | 'az' | 'new'
+let accountAddOpen = false;
+let expandedAccountId = null;
 // Parcurgere — go through tracked accounts one by one, oldest-checked first
 let browseOpen = false, browseQueue = [], browseIdx = 0, browseOpenedCurrent = false, browseSeen = 0;
 let materialsAccountFilter = null; // account id — set via "Vezi materialele" cross-link from a tracked account
@@ -5277,11 +5320,56 @@ function renderChecklist(){
    RENDER: CALENDAR
 ========================================================= */
 let contentSubTab = 'posts'; // 'posts' | 'story'
+let contentSection = 'calendar'; // 'calendar' | 'ideas' | 'script' | 'shots'
+let selectedCalDay = null; // ISO of the day shown in the calendar panel
+let ideaSearch = '';
+let lastQuickPillar = 'tehnic';
 function contentSubNavHtml(){
   return '<div class="flex gap-2" style="margin-bottom:16px;">' +
     '<button data-action="set-content-subtab" data-subtab="posts" class="btn'+(contentSubTab==='posts'?' btn-active':'')+'">'+icon('calendar','icon-sm')+'Postări</button>' +
     '<button data-action="set-content-subtab" data-subtab="story" class="btn'+(contentSubTab==='story'?' btn-active':'')+'">📱 Story</button>' +
   '</div>';
+}
+function contentSectionNavHtml(){
+  const nPosts = (state.calendar.posts || []).filter(p => p.date >= todayISO()).length;
+  const nIdeas = Object.keys(state.content.ideas || {}).reduce((n,k) => n + (state.content.ideas[k] || []).length, 0);
+  const nShots = (state.shotList.items || []).filter(x => !x.done).length;
+  const chip = (id, label, cnt) => '<button type="button" data-action="set-content-section" data-section="'+id+'" class="sec-chip'+(contentSection===id?' sel':'')+'">'+label+(cnt!==null?' <span class="cnt">'+cnt+'</span>':'')+'</button>';
+  return '<div class="sec-nav">' + chip('calendar','📅 Calendar',nPosts) + chip('ideas','💡 Idei',nIdeas) + chip('script','✍️ Script',null) + chip('shots','🎬 Filmare',nShots) + '</div>';
+}
+function addQuickPost(iso){
+  const inp = document.getElementById('quick-post-' + iso);
+  const sel = document.getElementById('quick-pillar-' + iso);
+  const text = inp ? inp.value.trim() : '';
+  if (!text) { toast('Scrie ideea postării', 'error'); if (inp) inp.focus(); return; }
+  const pillar = (sel && sel.value) || lastQuickPillar;
+  lastQuickPillar = pillar;
+  const tags = detectSmartTags(text);
+  pushUndo();
+  const post = { id: uid(), date: iso, pillar: pillar, idea: text, status: 'idee', format: tags.format || SMART_TAG_DEFAULT_FORMAT };
+  if (tags.scope) post.scope = tags.scope;
+  state.calendar.posts.push(post);
+  saveKey('calendar', state.calendar);
+  selectedCalDay = iso;
+  render();
+  toast('Postare adăugată');
+}
+function addIdeaQuick(){
+  const inp = document.getElementById('quick-idea-input');
+  const sel = document.getElementById('quick-idea-pillar');
+  const text = inp ? inp.value.trim() : '';
+  if (!text) { toast('Scrie ideea', 'error'); if (inp) inp.focus(); return; }
+  const pillar = (sel && sel.value) || lastQuickPillar;
+  lastQuickPillar = pillar;
+  const tags = detectSmartTags(text);
+  pushUndo();
+  state.content.ideas[pillar] = state.content.ideas[pillar] || [];
+  state.content.ideas[pillar].push({ id: uid(), text: text, scope: tags.scope || '', format: tags.format || SMART_TAG_DEFAULT_FORMAT });
+  saveKey('content', state.content);
+  ideaSearch = '';
+  renderCalendar();
+  toast('Idee adăugată');
+  const n = document.getElementById('quick-idea-input'); if (n) n.focus();
 }
 function renderCalendar(){
   if (contentSubTab === 'story') renderContentStory();
@@ -5339,44 +5427,62 @@ function renderContentPosts(){
             (p.sourceLinkUrl ? '<a href="'+escapeAttr(p.sourceLinkUrl)+'" target="_blank" rel="noopener noreferrer" class="text-xs" style="color:var(--accent); display:inline-block; margin-bottom:10px;">'+icon('external','icon-sm')+' vezi sursa</a>' : '') +
             '<button data-action="cycle-status" data-id="'+p.id+'" class="badge" style="white-space:nowrap; background:'+POST_STATUS_COLORS[p.status]+'22;color:'+POST_STATUS_COLORS[p.status]+';border-color:transparent; margin-bottom:10px;">'+POST_STATUS_LABELS[p.status]+' →</button>' +
             '<div class="row-actions" style="padding-top:8px; border-top:1px solid var(--line); justify-content:flex-start; gap:2px;">' +
-              '<button data-action="toggle-post-evergreen" data-id="'+p.id+'" class="icon-btn" style="'+(p.evergreen?'color:#FBBF24;':'')+'" aria-label="Evergreen" title="Marchează Evergreen">'+icon('star','icon-sm')+'</button>' +
-              '<button data-action="add-post-to-shotlist" data-id="'+p.id+'" class="icon-btn" style="'+(inShotList?'color:var(--accent);':'')+'" aria-label="Adaugă în Shot List" title="'+(inShotList?'Deja e în Shot List (filmare)':'Adaugă în Shot List, pentru sesiunea de filmare')+'">'+icon('film','icon-sm')+'</button>' +
-              '<button data-action="move-post" data-id="'+p.id+'" data-days="-1" class="icon-btn" aria-label="Ziua anterioară" title="Mută în ziua anterioară">'+icon('chevronLeft','icon-sm')+'</button>' +
-              '<button data-action="move-post" data-id="'+p.id+'" data-days="1" class="icon-btn" aria-label="Ziua următoare" title="Mută în ziua următoare">'+icon('chevronRight','icon-sm')+'</button>' +
+              '<button data-action="add-post-to-shotlist" data-id="'+p.id+'" class="btn btn-sm" style="'+(inShotList?'color:var(--accent);':'')+'" title="'+(inShotList?'Deja e în lista de filmat':'Adaugă în lista de filmat')+'">'+icon('film','icon-sm')+(inShotList?'În filmare ✓':'De filmat')+'</button>' +
               '<button data-action="delete-post" data-id="'+p.id+'" class="icon-btn" aria-label="Șterge" style="margin-left:auto;">'+icon('trash','icon-sm')+'</button>' +
             '</div>' +
-            (p.status === 'postat' ? '<button data-action="plan-story-sequence" data-id="'+p.id+'" class="btn btn-sm w-full mt-3" style="justify-content:center;">📱 Plan Secvență Stories</button>' : '') +
-            '<button data-action="generate-thumbnail-hooks" data-id="'+p.id+'" class="btn btn-sm w-full mt-2" style="justify-content:center;">🎯 Generează Titlu Copertă</button>' +
+            '<details class="more-actions"><summary>⋯ Mai multe</summary>' +
+              '<div class="flex flex-wrap gap-2" style="margin-top:8px;">' +
+                '<button data-action="toggle-post-evergreen" data-id="'+p.id+'" class="btn btn-sm" style="'+(p.evergreen?'color:#FBBF24;':'')+'">'+icon('star','icon-sm')+(p.evergreen?'Evergreen ✓':'Evergreen')+'</button>' +
+                '<button data-action="move-post" data-id="'+p.id+'" data-days="-1" class="btn btn-sm">'+icon('chevronLeft','icon-sm')+'Ziua dinainte</button>' +
+                '<button data-action="move-post" data-id="'+p.id+'" data-days="1" class="btn btn-sm">Ziua următoare'+icon('chevronRight','icon-sm')+'</button>' +
+                (p.status === 'postat' ? '<button data-action="plan-story-sequence" data-id="'+p.id+'" class="btn btn-sm">📱 Plan Stories</button>' : '') +
+                '<button data-action="generate-thumbnail-hooks" data-id="'+p.id+'" class="btn btn-sm">🎯 Titlu copertă</button>' +
+              '</div>' +
+            '</details>' +
             (thumbnailHooksMap[p.id] ? '<div class="flex-col gap-1 mt-2" style="display:flex;">' +
               thumbnailHooksMap[p.id].map(h => '<button data-action="copy-thumbnail-hook" data-text="'+escapeAttr(h)+'" class="flex items-center justify-between" style="background:rgba(0,0,0,.3); border:1px solid var(--line); border-radius:8px; padding:8px 10px; cursor:pointer;"><span class="text-xs" style="font-weight:800; letter-spacing:.03em; color:var(--text);">'+escapeHtml(h)+'</span>'+icon('copy','icon-sm')+'</button>').join('') +
             '</div>' : '') +
           '</div>';
         }).join('') : '<p class="text-xs mute3 italic">Nimic planificat.</p>') +
       '</div>' +
-      '<div class="flex-col gap-2" style="display:flex;">' +
-        '<select id="post-idea-'+iso+'" style="font-size:12px;">' +
-          '<option value="">Alege o idee din bancă…</option>' +
-          allIdeaCategories().map(cat => {
-            const opts = (state.content.ideas[cat.id] || []).map(it => '<option value="'+it.id+'">'+escapeAttr(it.text.slice(0,60))+'</option>').join('');
-            return opts ? '<optgroup label="'+escapeAttr(cat.label)+'">'+opts+'</optgroup>' : '';
-          }).join('') +
-        '</select>' +
-        '<button data-action="add-post" data-date="'+iso+'" class="btn btn-sm w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă în ziua asta</button>' +
+      '<div class="flex-col gap-2" style="display:flex; margin-top:6px;">' +
+        '<p class="eyebrow" style="margin:0;">Adaugă o postare</p>' +
+        '<input id="quick-post-'+iso+'" type="text" placeholder="Scrie ideea și apasă Enter…" style="font-size:14px;" />' +
+        '<div class="flex gap-2">' +
+          '<select id="quick-pillar-'+iso+'" class="flex-1" style="font-size:12px;">'+pillarOptions(lastQuickPillar)+'</select>' +
+          '<button data-action="add-quick-post" data-date="'+iso+'" class="btn btn-primary shrink-0">'+icon('plus','icon-sm')+'Adaugă</button>' +
+        '</div>' +
+        '<details class="more-actions"><summary>… sau alege din banca de idei</summary>' +
+          '<div class="flex-col gap-2" style="display:flex; margin-top:8px;">' +
+            '<select id="post-idea-'+iso+'" style="font-size:12px;">' +
+              '<option value="">Alege o idee din bancă…</option>' +
+              allIdeaCategories().map(cat => {
+                const opts = (state.content.ideas[cat.id] || []).map(it => '<option value="'+it.id+'">'+escapeAttr(it.text.slice(0,60))+'</option>').join('');
+                return opts ? '<optgroup label="'+escapeAttr(cat.label)+'">'+opts+'</optgroup>' : '';
+              }).join('') +
+            '</select>' +
+            '<button data-action="add-post" data-date="'+iso+'" class="btn btn-sm w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă ideea aleasă</button>' +
+          '</div>' +
+        '</details>' +
       '</div>' +
     '</div>';
   };
 
+  const foldTxt = (x) => String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const ideaQ = foldTxt(ideaSearch).trim();
   const ideaBankHtml = allIdeaCategories().map(cat => {
     const k = cat.id;
     const pl = cat;
-    const items = state.content.ideas[k] || [];
-    const collapsed = collapsedIdeaCategories.has(k);
+    const allItems = state.content.ideas[k] || [];
+    const items = ideaQ ? allItems.filter(it => foldTxt(it.text).indexOf(ideaQ) >= 0 || foldTxt(it.hook).indexOf(ideaQ) >= 0 || foldTxt(it.body).indexOf(ideaQ) >= 0) : allItems;
+    if (ideaQ && !items.length) return '';
+    const collapsed = ideaQ ? false : collapsedIdeaCategories.has(k);
     return '<div>' +
       '<button data-action="toggle-idea-category" data-cat="'+k+'" class="flex items-center justify-between w-full" style="background:none; border:none; padding:0; margin-bottom:8px; cursor:pointer;">' +
         '<div class="flex items-center gap-2">' +
           '<span class="dot" style="width:8px;height:8px;background:'+pl.color+'"></span>' +
           '<p class="text-xs" style="font-weight:600; color:rgba(245,245,240,.75); text-transform:uppercase; letter-spacing:.05em;">'+escapeHtml(pl.label)+'</p>' +
-          '<span class="text-xs mute3">('+items.length+')</span>' +
+          '<span class="text-xs mute3">('+(ideaQ ? items.length+'/'+allItems.length : items.length)+')</span>' +
         '</div>' +
         '<div class="flex items-center gap-1">' +
           (!cat.builtin ? '<span data-action="remove-idea-category" data-cat="'+k+'" class="icon-btn danger" style="width:22px;height:22px;" aria-label="Șterge categoria">'+icon('trash','icon-sm')+'</span>' : '') +
@@ -5428,7 +5534,7 @@ function renderContentPosts(){
               : '') +
           '</div>';
         }).join('') +
-        (() => {
+        (ideaQ ? '' : (() => {
           const nd = getNewIdeaTagDraft(k);
           return '<div>' +
             '<div class="flex gap-2">' +
@@ -5440,17 +5546,20 @@ function renderContentPosts(){
             '<p class="text-xs mute3" style="margin-top:6px;">Format</p>' +
             smartTagPillRow(SMART_TAG_FORMATS, nd.format, 'set-new-idea-format', 'data-pillar="'+k+'"') +
           '</div>';
-        })() +
+        })()) +
       '</div>') +
     '</div>';
   }).join('') +
-  (newIdeaCategoryOpen
+  (ideaQ ? (ideaBankEmptyCheck(ideaQ) ? '<p class="text-xs mute3 italic">Nicio idee găsită pentru „'+escapeHtml(ideaSearch)+'”.</p>' : '') : newIdeaCategoryOpen
     ? '<div class="flex gap-2">' +
         '<input id="new-idea-category-input" type="text" placeholder="Nume categorie nouă…" class="flex-1" style="font-size:12px;" />' +
         '<button data-action="confirm-add-idea-category" class="btn btn-sm btn-primary shrink-0">Adaugă</button>' +
         '<button data-action="cancel-add-idea-category" class="btn btn-sm shrink-0">Anulează</button>' +
       '</div>'
     : '<button data-action="open-add-idea-category" class="btn btn-dashed btn-sm w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Categorie nouă</button>');
+  function ideaBankEmptyCheck(q){
+    return !allIdeaCategories().some(cat => (state.content.ideas[cat.id] || []).some(it => foldTxt(it.text).indexOf(q) >= 0 || foldTxt(it.hook).indexOf(q) >= 0 || foldTxt(it.body).indexOf(q) >= 0));
+  }
 
   const scriptGenBlock = scriptState.current
     ? '<div class="mt-4 animate-fade flex-col gap-3" style="display:flex;">' +
@@ -5489,13 +5598,30 @@ function renderContentPosts(){
     '</div>';
   }).join('');
 
+  const selISO = (selectedCalDay && week.some(d => dateToISO(d) === selectedCalDay)) ? selectedCalDay
+    : (week.some(d => dateToISO(d) === t) ? t : dateToISO(week[0]));
+  selectedCalDay = selISO;
+  const selDate = week.find(d => dateToISO(d) === selISO) || week[0];
+  const dayColSel = contentSection === 'calendar' ? dayCol(selDate, 0) : '';
+  const dayStripHtml = '<div class="day-strip">' + week.map(d => {
+    const iso = dateToISO(d);
+    const ps = state.calendar.posts.filter(p => p.date === iso);
+    return '<button type="button" data-action="select-cal-day" data-date="'+iso+'" class="day-chip'+(iso===t?' today':'')+(iso===selISO?' sel':'')+'">' +
+      '<span class="dc-name">'+RO_DAYS_SHORT[(d.getDay() + 6) % 7]+'</span>' +
+      '<span class="dc-num">'+d.getDate()+'</span>' +
+      '<span class="dc-dots">'+ps.slice(0,4).map(p => '<i style="background:'+(POST_STATUS_COLORS[p.status]||'#888')+'"></i>').join('')+'</span>' +
+    '</button>';
+  }).join('') + '</div>';
+
   document.getElementById('content').innerHTML =
   '<div class="animate-fade flex-col gap-6" style="display:flex;">' +
     contentSubNavHtml() +
+    contentSectionNavHtml() +
 
+    (contentSection === 'calendar' ? (
     '<div>' +
       '<div class="flex items-center justify-between flex-wrap gap-3 mb-4" style="margin-bottom:14px;">' +
-        '<h2 class="h1">Postări</h2>' +
+        '<p class="text-sm" style="font-weight:600;">Alege ziua, apoi adaugă postarea</p>' +
         '<div class="flex items-center gap-2">' +
           '<button data-action="week-prev" class="btn btn-icon">'+icon('chevronLeft','icon-sm')+'</button>' +
           '<span class="text-xs mute2 tabular" style="width:150px; text-align:center;">'+rangeLabel+'</span>' +
@@ -5506,17 +5632,27 @@ function renderContentPosts(){
         '<button data-action="reprogram-evergreen" class="btn btn-sm" title="Re-programează o postare Evergreen aleasă la întâmplare">🔄 Top Evergreen</button>' +
         '<button data-action="archive-old-posts" class="btn btn-sm" title="Arhivează postările mai vechi de 30 de zile">'+icon('bookmark','icon-sm')+'Curăță istoric</button>' +
       '</div>' +
-      '<div class="week-row">' + week.map((d,i) => dayCol(d,i)).join('') + '</div>' +
-    '</div>' +
+      dayStripHtml +
+      '<div class="day-solo">' + dayColSel + '</div>' +
+    '</div>'
+    ) : '') +
 
-    '<div class="grid grid-1-2">' +
+    (contentSection === 'ideas' ? (
       '<div class="card">' +
-        '<h3 class="h2 mb-1" style="margin-bottom:4px;">Idei rapide de Reels</h3>' +
-        '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Editează, șterge sau adaugă idei — copiază-le direct în ziua dorită.</p>' +
+        '<h3 class="h2 mb-1" style="margin-bottom:4px;">Banca de idei</h3>' +
+        '<p class="text-xs mute2 mb-4" style="margin-bottom:12px;">Caută, adaugă rapid, apoi trimite ideea într-o zi din Calendar sau în lista de filmat (🎬).</p>' +
+        '<input id="idea-search-input" type="search" value="'+escapeAttr(ideaSearch)+'" placeholder="🔍 Caută în idei…" style="margin-bottom:10px;" />' +
+        '<div class="flex gap-2" style="margin-bottom:6px;">' +
+          '<input id="quick-idea-input" type="text" placeholder="Idee nouă, apoi Enter…" class="flex-1" />' +
+          '<button data-action="add-idea-quick" class="btn btn-primary shrink-0">'+icon('plus','icon-sm')+'Adaugă</button>' +
+        '</div>' +
+        '<select id="quick-idea-pillar" style="font-size:12px; margin-bottom:16px;">'+pillarOptions(lastQuickPillar)+'</select>' +
         '<div class="flex-col gap-5" style="display:flex;">' + ideaBankHtml + '</div>' +
-      '</div>' +
+      '</div>'
+    ) : '') +
 
-      '<div class="card" style="height:fit-content;">' +
+    (contentSection === 'script' ? (
+      '<div class="card">' +
         '<h3 class="h2 mb-1" style="margin-bottom:4px;">Generator de scripturi</h3>' +
         '<p class="text-xs mute2 mb-4" style="margin-bottom:16px;">Structură Hook + Body + CTA pe baza pilonului ales.</p>' +
         '<div class="flex gap-2">' +
@@ -5533,9 +5669,10 @@ function renderContentPosts(){
           '</div>' +
           '<button data-action="add-script" data-pillar="'+scriptState.pillar+'" class="btn btn-dashed btn-sm w-full mt-2" style="justify-content:center;">'+icon('plus','icon-sm')+'Variantă nouă</button>' +
         '</div>' +
-      '</div>' +
-    '</div>' +
+      '</div>'
+    ) : '') +
 
+    (contentSection === 'shots' ? (
     '<div class="card">' +
       '<div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:4px;">' +
         '<h3 class="h2">'+icon('film','icon-sm').replace('class="icon-sm"','class="icon-sm" style="display:inline;vertical-align:-2px;margin-right:6px;"')+'Shot List pentru Filmare</h3>' +
@@ -5625,8 +5762,9 @@ function renderContentPosts(){
               '</div>';
             }).join('') +
           '</div>'
-        : '<p class="text-xs mute3 italic">Nicio idee adăugată încă în Shot List.</p>') +
-    '</div>' +
+        : '<div style="text-align:center; padding:18px 8px;"><p class="text-sm" style="margin-bottom:6px;">🎬 Lista de filmat e goală</p><p class="text-xs mute3" style="margin-bottom:12px;">Adaugă idei cu iconița 🎬 din Idei sau din postările din Calendar.</p><button data-action="set-content-section" data-section="ideas" class="btn btn-sm">💡 Mergi la Idei</button></div>') +
+    '</div>'
+    ) : '') +
 
   '</div>';
 }
@@ -6241,20 +6379,60 @@ function normalizeInstagramAccountInput(raw){
   return { handle: '@'+clean, url: 'https://instagram.com/'+clean };
 }
 function addTrackedAccount(){
-  const input = document.getElementById('new-account-handle');
+  const input = document.getElementById('acc-add-input');
   const catsInput = document.getElementById('new-account-categories');
-  if (!input || !input.value.trim()) { toast('Adaugă mai întâi un @handle sau un link de Instagram', 'error'); return; }
-  const { handle, url } = normalizeInstagramAccountInput(input.value);
-  if (state.trackedAccounts.some(a => a.handle.toLowerCase() === handle.toLowerCase())) {
-    toast('Ai deja contul ăsta în listă', 'error');
-    return;
-  }
+  const raw = input ? input.value.trim() : '';
+  if (!raw) { toast('Lipește unul sau mai multe @handle-uri / linkuri de Instagram', 'error'); return; }
+  const tokens = raw.split(/[\s,;]+/).filter(Boolean);
   const categories = catsInput && catsInput.value.trim() ? catsInput.value.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const seen = new Set(state.trackedAccounts.map(a => (a.handle||'').toLowerCase()));
+  const fresh = []; let dup = 0;
+  tokens.forEach(tk => {
+    const r = normalizeInstagramAccountInput(tk);
+    if (!r || !r.handle) return;
+    const key = r.handle.toLowerCase();
+    if (seen.has(key)) { dup++; return; }
+    seen.add(key);
+    fresh.push({ id: uid(), handle: r.handle, url: r.url, categories: categories.slice(), note: '', postLinks: [], photo: null, addedAt: new Date().toISOString(), lastCheckedAt: null });
+  });
+  if (!fresh.length) { toast(dup ? (dup===1 ? 'Ai deja contul ăsta în listă' : 'Ai deja toate conturile astea în listă') : 'Nu am găsit niciun @handle valid', 'error'); return; }
   pushUndo();
-  state.trackedAccounts.unshift({ id: uid(), handle, url, categories, note: '', postLinks: [], photo: null, addedAt: new Date().toISOString(), lastCheckedAt: null });
+  state.trackedAccounts = fresh.reverse().concat(state.trackedAccounts);
   saveKey('trackedAccounts', state.trackedAccounts);
+  accountAddOpen = false;
   render();
-  toast('Cont adăugat');
+  toast('Adăugate ' + fresh.length + (dup ? ' ('+dup+' deja în listă)' : ''));
+}
+function openAndCheckAccount(id){
+  const a = state.trackedAccounts.find(x => x.id === id);
+  if (!a) return;
+  try { window.open(a.url, '_blank', 'noopener,noreferrer'); } catch(e) {}
+  pushUndo();
+  a.lastCheckedAt = new Date().toISOString();
+  saveKey('trackedAccounts', state.trackedAccounts);
+  renderLibrary();
+}
+function toggleAccountExpand(id){
+  expandedAccountId = (expandedAccountId === id) ? null : id;
+  if (expandedAccountId !== editAccountId) editAccountId = null;
+  renderLibrary();
+}
+function visibleTrackedAccounts(){
+  let list = filteredTrackedAccounts();
+  if (accountView === 'todo') list = list.filter(a => !checkedToday(a));
+  else if (accountView === 'done') list = list.filter(a => checkedToday(a));
+  if (accountSort === 'az') list.sort((x,y) => normalize(x.handle).localeCompare(normalize(y.handle)));
+  else if (accountSort === 'new') list.sort((x,y) => (new Date(y.addedAt).getTime()||0) - (new Date(x.addedAt).getTime()||0));
+  else list.sort((x,y) => checkedTs(x) - checkedTs(y));
+  return list;
+}
+function browseToggleCategory(cat){
+  const a = browseCurrent(); if (!a) return;
+  a.categories = a.categories || [];
+  const i = a.categories.indexOf(cat);
+  if (i >= 0) a.categories.splice(i,1); else a.categories.push(cat);
+  saveKey('trackedAccounts', state.trackedAccounts);
+  renderOverlay();
 }
 function deleteTrackedAccount(id){
   if (!confirm('Ștergi acest cont din listă? Materialele salvate deja rămân — doar legătura cu contul se pierde.')) return;
@@ -6380,7 +6558,10 @@ function browseOverlayHtml(){
         avatar +
         '<p class="h2" style="word-break:break-word; margin-top:6px;">'+escapeHtml(a.handle)+'</p>' +
         '<p class="text-xs mute3">'+daysAgoLabel(a.lastCheckedAt)+'</p>' +
-        (a.categories.length ? '<div class="flex flex-wrap gap-1" style="justify-content:center;">'+a.categories.map(c => '<span class="badge">#'+escapeHtml(c)+'</span>').join('')+'</div>' : '') +
+        (() => {
+          const cats = Array.from(new Set(state.trackedAccounts.flatMap(x => x.categories || []))).sort();
+          return cats.length ? '<div class="flex flex-wrap gap-1" style="justify-content:center;">'+cats.map(c => '<button data-action="browse-toggle-cat" data-cat="'+escapeAttr(c)+'" class="status-pill'+(a.categories.indexOf(c)>=0?' active':'')+'"'+(a.categories.indexOf(c)>=0?' style="background:var(--accent);"':'')+'>#'+escapeHtml(c)+'</button>').join('')+'</div>' : '';
+        })() +
         (a.note ? '<p class="text-sm muted" style="line-height:1.5;">'+escapeHtml(a.note)+'</p>' : '') +
       '</div>' +
       previews +
@@ -6398,7 +6579,7 @@ function toggleAccountCategoryFilter(cat){
   if (i >= 0) accountCategoryFilter.splice(i,1); else accountCategoryFilter.push(cat);
   renderLibrary();
 }
-function startEditAccount(id){ editAccountId = id; renderLibrary(); }
+function startEditAccount(id){ editAccountId = id; expandedAccountId = id; renderLibrary(); }
 function cancelEditAccount(){ editAccountId = null; renderLibrary(); }
 function saveEditAccount(id){
   const catsInput = document.getElementById('edit-account-categories-input');
@@ -6841,109 +7022,125 @@ function renderMaterialsSection(){
   );
 }
 function renderTrackedAccountsSection(){
-  const allCategories = Array.from(new Set(state.trackedAccounts.flatMap(a => a.categories))).sort();
-  const accounts = filteredTrackedAccounts();
-  const leftToday = accounts.filter(a => !checkedToday(a)).length;
-  const browseCard = state.trackedAccounts.length
-    ? '<button data-action="start-browse" class="btn btn-primary w-full" style="justify-content:center; min-height:52px; font-size:16px;">▶ Parcurge conturile' +
-        (accounts.length ? ' · '+(leftToday ? leftToday+' de văzut azi' : 'toate văzute azi ✓') : '') +
-        ((accountCategoryFilter.length || accountSearch.trim()) ? ' (filtrate)' : '') +
-      '</button>'
+  const allCategories = Array.from(new Set(state.trackedAccounts.flatMap(a => a.categories || []))).sort();
+  const scoped = filteredTrackedAccounts();
+  const doneN = scoped.filter(a => checkedToday(a)).length;
+  const leftN = scoped.length - doneN;
+  const accounts = visibleTrackedAccounts();
+  const filtered = !!(accountCategoryFilter.length || accountSearch.trim());
+  const pct = scoped.length ? Math.round(doneN / scoped.length * 100) : 0;
+
+  const summary = state.trackedAccounts.length
+    ? '<div class="card" style="padding:14px;">' +
+        '<div class="flex items-center justify-between gap-2" style="margin-bottom:8px;">' +
+          '<p class="text-sm" style="font-weight:700;">'+scoped.length+' conturi'+(filtered?' (filtrate)':'')+'</p>' +
+          '<p class="text-xs mute2">✓ '+doneN+' azi · '+leftN+' rămase</p>' +
+        '</div>' +
+        '<div style="height:6px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden; margin-bottom:12px;"><div style="height:100%; width:'+pct+'%; background:var(--accent);"></div></div>' +
+        '<button data-action="start-browse" class="btn btn-primary w-full" style="justify-content:center; min-height:52px; font-size:16px;">▶ '+(leftN ? 'Parcurge ('+leftN+' de văzut)' : 'Toate văzute azi ✓ — reia')+'</button>' +
+      '</div>'
     : '';
 
-  const accountCardHtml = (a) => {
-    const editing = editAccountId === a.id;
-    const materialsCount = state.links.filter(l => l.sourceAccountId === a.id).length;
-    const postLinks = a.postLinks || [];
-    const previewGrid = postLinks.length
-      ? '<div class="grid" style="grid-template-columns:repeat('+postLinks.length+',1fr); gap:6px; margin-top:12px;">' +
-          postLinks.map(p => p.embedUrl
-            ? '<a href="'+escapeAttr(p.url)+'" target="_blank" rel="noopener noreferrer" style="position:relative; display:block; aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:#000;" title="Deschide postarea">' +
-                '<iframe src="'+escapeAttr(p.embedUrl)+'" style="width:100%; height:100%; border:0; display:block; pointer-events:none;" loading="lazy" title="Previzualizare postare"></iframe>' +
-              '</a>'
-            : '<a href="'+escapeAttr(p.url)+'" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; justify-content:center; aspect-ratio:1/1; border-radius:8px; background:rgba(0,0,0,.28); border:1px solid var(--line);" title="Deschide postarea">'+icon('external','icon-sm')+'</a>'
-          ).join('') +
-        '</div>'
-      : '';
-    const initial = (a.handle||'').replace(/^@/,'').charAt(0).toUpperCase() || '?';
-    const avatarHtml = '<label class="shrink-0" style="display:block; width:44px; height:44px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,.06); border:1px solid var(--line); cursor:pointer;" title="Adaugă/schimbă poza de profil">' +
-      (a.photo
-        ? '<img src="'+escapeAttr(a.photo)+'" alt="" style="width:100%; height:100%; object-fit:cover; display:block;" />'
-        : '<span style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:15px; font-weight:700; color:var(--text-faint);">'+escapeHtml(initial)+'</span>') +
-      '<input type="file" accept="image/*" data-action-file="account-photo" data-id="'+a.id+'" style="display:none;" />' +
-    '</label>';
-    return '<div class="card">' +
-      '<div class="flex items-start justify-between gap-3">' +
-        '<div class="flex items-start gap-3" style="min-width:0;">' +
-          avatarHtml +
-          '<div class="flex-1" style="min-width:0;">' +
-            '<p class="text-sm" style="font-weight:700; word-break:break-word;">'+escapeHtml(a.handle)+'</p>' +
-            '<p class="text-xs mute3 mt-1">'+daysAgoLabel(a.lastCheckedAt)+'</p>' +
-          '</div>' +
-        '</div>' +
-        '<div class="row-actions shrink-0">' +
-          (a.photo ? '<button data-action="delete-account-photo" data-id="'+a.id+'" class="icon-btn" aria-label="Șterge poza" title="Șterge poza de profil">'+icon('x','icon-sm')+'</button>' : '') +
-          '<button data-action="copy-account-link" data-id="'+a.id+'" class="icon-btn" aria-label="Copiază link profil" title="Copiază link profil">'+icon('copy','icon-sm')+'</button>' +
-          '<button data-action="delete-account" data-id="'+a.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
-        '</div>' +
-      '</div>' +
-      previewGrid +
-      '<div class="flex flex-wrap gap-2 mt-3">' +
-        '<button data-action="open-account" data-id="'+a.id+'" class="btn flex-1" style="justify-content:center; min-width:140px;">'+icon('external','icon-sm')+'Deschide profil</button>' +
-        '<button data-action="mark-account-checked" data-id="'+a.id+'" class="btn flex-1" style="justify-content:center; min-width:140px;">'+icon('check','icon-sm')+'Am verificat</button>' +
-      '</div>' +
-      (materialsCount
-        ? '<button data-action="filter-materials-by-account" data-id="'+a.id+'" class="btn btn-sm w-full mt-2" style="justify-content:center;">'+icon('play','icon-sm')+'Vezi materialele salvate ('+materialsCount+')</button>'
-        : '') +
-      (editing
-        ? '<div class="mt-3">' +
-            '<label class="field-label">Categorii</label>' +
-            '<input id="edit-account-categories-input" type="text" value="'+escapeAttr(a.categories.join(', '))+'" placeholder="ex: mâncare, exerciții explicate" style="margin-bottom:8px;" />' +
-            '<label class="field-label">Notă (opțional)</label>' +
-            '<textarea id="edit-account-note-input" placeholder="Ce înveți de la acest cont…" style="min-height:60px; margin-bottom:8px;">'+escapeHtml(a.note||'')+'</textarea>' +
-            '<label class="field-label">Previzualizări — până la 3 linkuri de postări/reels (opțional)</label>' +
-            [1,2,3].map(n => '<input id="edit-account-post'+n+'-input" type="text" value="'+escapeAttr((postLinks[n-1]&&postLinks[n-1].url)||'')+'" placeholder="Link postare/reel '+n+'…" style="margin-bottom:6px;" />').join('') +
-            '<div class="flex gap-2 mt-1">' +
-              '<button data-action="save-account" data-id="'+a.id+'" class="btn btn-sm btn-primary">Salvează</button>' +
-              '<button data-action="cancel-account" class="btn btn-sm">Anulează</button>' +
-            '</div>' +
-          '</div>'
-        : '<div class="mt-3" data-action="edit-account" data-id="'+a.id+'" style="cursor:pointer;">' +
-            '<div class="flex flex-wrap gap-1" style="min-height:22px;">' +
-              (a.categories.length ? a.categories.map(c => '<span class="badge">#'+escapeHtml(c)+'</span>').join('') : '<span class="text-xs mute3 italic">+ adaugă categorii (ex: mâncare, exerciții explicate)</span>') +
-            '</div>' +
-            (a.note ? '<p class="text-xs muted mt-2" style="line-height:1.5;">'+escapeHtml(a.note)+'</p>' : '') +
-          '</div>') +
-    '</div>';
+  const addBlock = accountAddOpen
+    ? '<div class="card">' +
+        '<div class="flex items-center justify-between" style="margin-bottom:8px;"><p class="eyebrow" style="margin:0;">Adaugă conturi</p><button data-action="toggle-account-add" class="icon-btn" aria-label="Închide">'+icon('x','icon-sm')+'</button></div>' +
+        '<textarea id="acc-add-input" placeholder="Lipește unul sau mai multe @handle / linkuri (separate prin spațiu sau rând nou)…" style="min-height:70px; margin-bottom:8px;"></textarea>' +
+        '<input id="new-account-categories" type="text" placeholder="Categorii (opțional), ex: mâncare, exerciții" style="margin-bottom:8px;" />' +
+        '<button data-action="add-account" class="btn btn-primary w-full" style="justify-content:center;">'+icon('plus','icon-sm')+'Adaugă</button>' +
+      '</div>'
+    : '<button data-action="toggle-account-add" class="btn btn-dashed w-full" style="justify-content:center;">＋ Adaugă conturi</button>';
+
+  const segBtn = (id, label, n) => '<button type="button" data-action="set-account-view" data-view="'+id+'" class="'+(accountView===id?'sel':'')+'">'+label+' <span style="opacity:.7;">'+n+'</span></button>';
+  const seg = '<div class="seg">' + segBtn('todo','De văzut',leftN) + segBtn('all','Toate',scoped.length) + segBtn('done','Văzute azi',doneN) + '</div>';
+
+  const chips = allCategories.length
+    ? '<div class="chip-row">' + allCategories.map(c => {
+        const n = state.trackedAccounts.filter(a => (a.categories||[]).includes(c)).length;
+        const on = accountCategoryFilter.includes(c);
+        return '<button data-action="toggle-account-category" data-cat="'+escapeAttr(c)+'" class="status-pill'+(on?' active':'')+'"'+(on?' style="background:var(--accent);"':'')+'>#'+escapeHtml(c)+' '+n+'</button>';
+      }).join('') + '</div>'
+    : '';
+
+  const tools = state.trackedAccounts.length
+    ? '<div class="flex gap-2 items-center">' +
+        '<input id="account-search-input" type="search" placeholder="🔍 Caută cont…" value="'+escapeAttr(accountSearch)+'" class="flex-1" />' +
+        '<select id="account-sort-select" style="width:auto; flex:0 0 auto;" aria-label="Sortare">' +
+          '<option value="oldest"'+(accountSort==='oldest'?' selected':'')+'>Cele mai vechi întâi</option>' +
+          '<option value="az"'+(accountSort==='az'?' selected':'')+'>A–Z</option>' +
+          '<option value="new"'+(accountSort==='new'?' selected':'')+'>Adăugate recent</option>' +
+        '</select>' +
+      '</div>'
+    : '';
+
+  const statusOf = (a) => {
+    const t = checkedTs(a);
+    if (!t) return ['never','nou'];
+    const days = Math.floor((Date.now() - t) / 86400000);
+    if (checkedToday(a)) return ['ok','azi ✓'];
+    if (days <= 1) return ['late','ieri'];
+    return ['late','acum '+days+' zile'];
   };
 
-  return (
-    browseCard +
-    '<div class="card">' +
-      '<p class="eyebrow" style="margin-bottom:10px;">Adaugă un cont de Instagram urmărit</p>' +
-      '<div class="flex flex-wrap gap-2">' +
-        '<input id="new-account-handle" type="text" placeholder="@handle sau link de profil…" class="flex-1" style="min-width:200px;" />' +
-        '<input id="new-account-categories" type="text" placeholder="categorii, ex: mâncare, exerciții explicate" class="flex-1" style="min-width:200px;" />' +
-        '<button data-action="add-account" class="btn btn-primary">'+icon('plus','icon-sm')+'Adaugă</button>' +
-      '</div>' +
-      '<p class="text-xs mute3 mt-2">Categoriile te ajută să filtrezi rapid — ex. conturi cu conținut de mâncare, conturi cu exerciții explicate, conturi de motivație.</p>' +
-    '</div>' +
+  const rowHtml = (a) => {
+    const open = expandedAccountId === a.id;
+    const editing = editAccountId === a.id;
+    const [stc, stl] = statusOf(a);
+    const initial = (a.handle||'').replace(/^@/,'').charAt(0).toUpperCase() || '?';
+    const cats = (a.categories||[]);
+    let html = '<div class="acc-item'+(open?' open':'')+'">' +
+      '<div class="acc-row">' +
+        '<div class="acc-av">'+(a.photo ? '<img src="'+escapeAttr(a.photo)+'" alt="" />' : escapeHtml(initial))+'</div>' +
+        '<div class="acc-main" data-action="toggle-account-expand" data-id="'+a.id+'">' +
+          '<p class="acc-handle">'+escapeHtml(a.handle)+'</p>' +
+          '<p class="acc-meta"><span class="acc-st '+stc+'">'+stl+'</span>' + cats.slice(0,2).map(c => '<span>#'+escapeHtml(c)+'</span>').join('') + (cats.length>2?'<span>+'+(cats.length-2)+'</span>':'') + '</p>' +
+        '</div>' +
+        '<button type="button" data-action="open-and-check" data-id="'+a.id+'" class="acc-open" aria-label="Deschide profilul și bifează">↗ Deschide</button>' +
+      '</div>';
+    if (open) {
+      const materialsCount = state.links.filter(l => l.sourceAccountId === a.id).length;
+      const postLinks = a.postLinks || [];
+      const previewGrid = postLinks.length
+        ? '<div class="grid" style="grid-template-columns:repeat('+postLinks.length+',1fr); gap:6px; margin-top:12px;">' +
+            postLinks.map(pl => pl.embedUrl
+              ? '<a href="'+escapeAttr(pl.url)+'" target="_blank" rel="noopener noreferrer" style="position:relative; display:block; aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:#000;"><iframe src="'+escapeAttr(pl.embedUrl)+'" style="width:100%; height:100%; border:0; display:block; pointer-events:none;" loading="lazy" title="Previzualizare postare"></iframe></a>'
+              : '<a href="'+escapeAttr(pl.url)+'" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; justify-content:center; aspect-ratio:1/1; border-radius:8px; background:rgba(0,0,0,.28); border:1px solid var(--line);">'+icon('external','icon-sm')+'</a>'
+            ).join('') + '</div>'
+        : '';
+      html += '<div class="acc-detail">' + previewGrid +
+        '<div class="flex flex-wrap gap-2" style="margin-top:12px;">' +
+          '<button data-action="mark-account-checked" data-id="'+a.id+'" class="btn btn-sm">'+icon('check','icon-sm')+'Am verificat</button>' +
+          '<button data-action="copy-account-link" data-id="'+a.id+'" class="btn btn-sm">'+icon('copy','icon-sm')+'Copiază link</button>' +
+          '<label class="btn btn-sm" style="cursor:pointer;">📷 Poză<input type="file" accept="image/*" data-action-file="account-photo" data-id="'+a.id+'" style="display:none;" /></label>' +
+          (a.photo ? '<button data-action="delete-account-photo" data-id="'+a.id+'" class="btn btn-sm">'+icon('x','icon-sm')+'Șterge poza</button>' : '') +
+          '<button data-action="delete-account" data-id="'+a.id+'" class="btn btn-sm" style="color:#F87171;">'+icon('trash','icon-sm')+'Șterge contul</button>' +
+        '</div>' +
+        (materialsCount ? '<button data-action="filter-materials-by-account" data-id="'+a.id+'" class="btn btn-sm w-full" style="justify-content:center; margin-top:8px;">'+icon('play','icon-sm')+'Materiale salvate ('+materialsCount+')</button>' : '') +
+        (editing
+          ? '<div style="margin-top:12px;">' +
+              '<label class="field-label">Categorii (separate prin virgulă)</label>' +
+              '<input id="edit-account-categories-input" type="text" value="'+escapeAttr(cats.join(', '))+'" placeholder="ex: mâncare, exerciții explicate" style="margin-bottom:8px;" />' +
+              '<label class="field-label">Notă (opțional)</label>' +
+              '<textarea id="edit-account-note-input" placeholder="Ce înveți de la acest cont…" style="min-height:60px; margin-bottom:8px;">'+escapeHtml(a.note||'')+'</textarea>' +
+              '<label class="field-label">Previzualizări — până la 3 linkuri (opțional)</label>' +
+              [1,2,3].map(n => '<input id="edit-account-post'+n+'-input" type="text" value="'+escapeAttr((postLinks[n-1]&&postLinks[n-1].url)||'')+'" placeholder="Link postare/reel '+n+'…" style="margin-bottom:6px;" />').join('') +
+              '<div class="flex gap-2" style="margin-top:4px;"><button data-action="save-account" data-id="'+a.id+'" class="btn btn-sm btn-primary">Salvează</button><button data-action="cancel-account" class="btn btn-sm">Anulează</button></div>' +
+            '</div>'
+          : '<div style="margin-top:12px; cursor:pointer;" data-action="edit-account" data-id="'+a.id+'">' +
+              '<div class="flex flex-wrap gap-1">' + (cats.length ? cats.map(c => '<span class="badge">#'+escapeHtml(c)+'</span>').join('') : '<span class="text-xs mute3 italic">+ adaugă categorii</span>') + '<span class="badge">✎ Editează</span></div>' +
+              (a.note ? '<p class="text-xs muted" style="margin-top:8px; line-height:1.5;">'+escapeHtml(a.note)+'</p>' : '') +
+            '</div>') +
+      '</div>';
+    }
+    return html + '</div>';
+  };
 
-    (allCategories.length
-      ? '<div class="flex flex-wrap gap-2">' +
-          allCategories.map(c => '<button data-action="toggle-account-category" data-cat="'+escapeAttr(c)+'" class="status-pill'+(accountCategoryFilter.includes(c)?' active':'')+'"'+(accountCategoryFilter.includes(c)?' style="background:var(--accent);"':'')+'>#'+escapeHtml(c)+'</button>').join('') +
-        '</div>'
-      : '') +
+  let listHtml;
+  if (accounts.length) listHtml = '<div class="acc-list">' + accounts.map(rowHtml).join('') + '</div>';
+  else if (!state.trackedAccounts.length) listHtml = '<div class="card text-center" style="padding:32px 20px;"><p class="text-sm muted">Niciun cont urmărit încă.</p><p class="text-xs mute3 mt-1">Apasă „＋ Adaugă conturi” și lipește mai multe @handle-uri deodată.</p></div>';
+  else if (accountView === 'todo' && !filtered) listHtml = '<div class="card text-center" style="padding:32px 20px;"><p style="font-size:34px;">🎉</p><p class="text-sm">Le-ai văzut pe toate azi</p><button data-action="set-account-view" data-view="all" class="btn btn-sm" style="margin-top:10px;">Vezi toate conturile</button></div>';
+  else listHtml = '<div class="card text-center" style="padding:28px 20px;"><p class="text-sm muted">Niciun cont aici.</p>'+(filtered?'<button data-action="clear-account-filters" class="btn btn-sm" style="margin-top:10px;">Șterge filtrele</button>':'')+'</div>';
 
-    '<div class="flex gap-2 items-center">' + icon('search','icon-sm') +
-      '<input id="account-search-input" type="text" placeholder="Caută după @handle, categorie sau notă…" value="'+escapeAttr(accountSearch)+'" class="flex-1" />' +
-    '</div>' +
-
-    (accounts.length
-      ? '<div class="grid grid-1-2">' + accounts.map(accountCardHtml).join('') + '</div>'
-      : '<div class="card text-center" style="padding:40px 20px;"><p class="text-sm muted">'+(state.trackedAccounts.length ? 'Niciun cont nu corespunde filtrului.' : 'Niciun cont urmărit încă.')+'</p><p class="text-xs mute3 mt-1">'+(state.trackedAccounts.length ? '' : 'Adaugă mai sus un @handle sau un link de profil de Instagram pentru a începe.')+'</p></div>'
-    )
-  );
+  return '<div class="flex-col gap-3" style="display:flex;">' + summary + seg + chips + tools + listHtml + addBlock + '</div>';
 }
 
 function renderQuickDesk(){
@@ -7909,6 +8106,10 @@ function onContentClick(e){
   else if (action === 'week-prev') { weekOffset--; renderCalendar(); }
   else if (action === 'week-next') { weekOffset++; renderCalendar(); }
   else if (action === 'add-post') addPost(el.dataset.date);
+  else if (action === 'add-quick-post') addQuickPost(el.dataset.date);
+  else if (action === 'add-idea-quick') addIdeaQuick();
+  else if (action === 'set-content-section') { contentSection = el.dataset.section; renderCalendar(); window.scrollTo(0,0); }
+  else if (action === 'select-cal-day') { selectedCalDay = el.dataset.date; renderCalendar(); }
   else if (action === 'cycle-status') cyclePostStatus(el.dataset.id);
   else if (action === 'delete-post') deletePost(el.dataset.id);
   else if (action === 'move-post') movePost(el.dataset.id, Number(el.dataset.days));
@@ -8150,6 +8351,12 @@ function onContentClick(e){
   else if (action === 'convert-link-to-idea') convertLinkToIdea(el.dataset.id);
   else if (action === 'switch-library-view') switchLibraryView(el.dataset.view);
   else if (action === 'add-account') addTrackedAccount();
+  else if (action === 'open-and-check') openAndCheckAccount(el.dataset.id);
+  else if (action === 'toggle-account-expand') toggleAccountExpand(el.dataset.id);
+  else if (action === 'toggle-account-add') { accountAddOpen = !accountAddOpen; renderLibrary(); }
+  else if (action === 'set-account-view') { accountView = el.dataset.view; renderLibrary(); }
+  else if (action === 'clear-account-filters') { accountCategoryFilter = []; accountSearch = ''; renderLibrary(); }
+  else if (action === 'browse-toggle-cat') browseToggleCategory(el.dataset.cat);
   else if (action === 'delete-account') deleteTrackedAccount(el.dataset.id);
   else if (action === 'copy-account-link') copyTrackedAccountLink(el.dataset.id);
   else if (action === 'delete-account-photo') deleteAccountPhoto(el.dataset.id);
@@ -8171,6 +8378,7 @@ function onContentClick(e){
   else if (action === 'toggle-materials-shotlist-filter') { materialsShotListOnly = !materialsShotListOnly; renderLibrary(); }
 }
 function onContentChange(e){
+  if (e.target && e.target.id === 'account-sort-select') { accountSort = e.target.value; renderLibrary(); return; }
   const el = e.target.closest('[data-field]');
   if (el) {
     const field = el.dataset.field;
@@ -8278,6 +8486,7 @@ function onContentInput(e){
   else if (e.target && e.target.id === 'lead-notes-textarea') { onLeadNotesInput(e.target.dataset.id, e.target.value); }
   else if (e.target && e.target.id === 'link-search-input') { linkSearch = e.target.value; preserveCursor('link-search-input', renderLibrary); }
   else if (e.target && e.target.id === 'account-search-input') { accountSearch = e.target.value; preserveCursor('account-search-input', renderLibrary); }
+  else if (e.target && e.target.id === 'idea-search-input') { ideaSearch = e.target.value; preserveCursor('idea-search-input', renderCalendar); }
   else if (e.target && e.target.id === 'edit-idea-input') { updateEditIdeaTagsFromText(e.target.value); preserveCursor('edit-idea-input', renderCalendar); }
   else if (e.target && e.target.id && e.target.id.indexOf('new-idea-input-') === 0) {
     const pillar = e.target.id.slice('new-idea-input-'.length);
@@ -8320,6 +8529,12 @@ function onGlobalKeydown(e){
     if (leadQuickMenuFor) { closeLeadQuickMenu(); return; }
     if (browseOpen) { closeBrowse(); return; }
     return;
+  }
+  if (e.key === 'Enter' && e.target && e.target.id) {
+    const id = e.target.id;
+    if (id.indexOf('quick-post-') === 0) { e.preventDefault(); addQuickPost(id.slice('quick-post-'.length)); return; }
+    if (id === 'quick-idea-input') { e.preventDefault(); addIdeaQuick(); return; }
+    if (id === 'acc-add-input' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addTrackedAccount(); return; }
   }
   if (!e.altKey) return;
   if (anyOverlayOpen()) return; // don't switch tabs behind an open overlay — avoids duplicate-id / stale-state conflicts
