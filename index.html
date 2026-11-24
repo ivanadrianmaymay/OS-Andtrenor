@@ -10,9 +10,15 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v16';
+  var BUILD = 'v17';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
+  window.__osaPending = [];
+  var trail = [];
+  window.__osaMark = function(s){ try { trail.push(s + '@' + Math.round(performance.now())); } catch(e){} };
+  window.__osaMark('html');
+  var lastBeat = performance.now(), maxGap = 0;
+  setInterval(function(){ var n = performance.now(); if (n - lastBeat > maxGap) maxGap = n - lastBeat; lastBeat = n; }, 250);
   var errs = [];
   function note(x){ try { errs.push(String(x).slice(0, 220)); } catch(e){} }
   window.addEventListener('error', function(e){ note((e && e.message || 'error') + ' @' + (e && e.lineno) + ':' + (e && e.colno)); });
@@ -54,7 +60,11 @@
       '<button onclick="__osaAction(\'cache\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Șterge memoria temporară și reîncarcă</button>' +
       '<button onclick="__osaAction(\'safe\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Pornește în mod sigur</button>' +
       '<button onclick="__osaAction(\'copy\')" style="' + btn + 'border:1px solid rgba(255,255,255,.25); background:transparent; color:inherit;">Descarcă o copie a datelor</button>' +
-      '<p style="font-size:11px; opacity:.5; margin-top:12px; line-height:1.5; word-break:break-word; text-align:left;">Versiune: ' + BUILD + '<br>' + esc(msg || '') + (errs.length ? '<br>' + errs.map(esc).join('<br>') : '') + '</p>' +
+      '<p style="font-size:11px; opacity:.5; margin-top:12px; line-height:1.5; word-break:break-word; text-align:left;">Versiune: ' + BUILD + '<br>' + esc(msg || '') + (errs.length ? '<br>' + errs.map(esc).join('<br>') : '') +
+        '<br>Pași: ' + esc(trail.join(' → ')) +
+        '<br>Chei în așteptare: ' + esc((window.__osaPending || []).join(', ') || '—') +
+        '<br>Blocaj maxim al paginii: ' + Math.round(maxGap) + ' ms' +
+        '<br>Mod: ' + (/[?&]safe=1/.test(location.search) ? 'sigur' : 'normal') + '</p>' +
     '</div>';
   };
   setTimeout(function(){
@@ -374,7 +384,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v16</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v17</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -409,7 +419,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v16</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v17</p>
       </div>
     </div>
   </aside>
@@ -459,6 +469,8 @@
 <script>
 (function(){
 "use strict";
+function mark(x){ try { window.__osaMark(x); } catch(e){} }
+mark('script');
 
 /* =========================================================
    CONSTANTS — used only to SEED data on first run.
@@ -1279,6 +1291,24 @@ async function loadKey(key, fallback){
   ['local','idb','bridge'].forEach(src => { if (!candidates.some(c => c.src === src)) healStore(src, key, stamped); });
 
   return winner.v === undefined ? fallback : winner.v;
+}
+// Start-up must never wait forever on one key: if the full 3-store read
+// hasn't finished in 5s, take that key straight from localStorage (instant).
+async function loadKeyT(key, fallback){
+  window.__osaPending.push(key);
+  const timedOut = {};
+  let timer;
+  const r = await Promise.race([
+    loadKey(key, fallback),
+    new Promise(res => { timer = setTimeout(() => res(timedOut), 5000); }),
+  ]);
+  clearTimeout(timer);
+  window.__osaPending = window.__osaPending.filter(k => k !== key);
+  if (r !== timedOut) return r;
+  const rec = lsGet(key);
+  if (rec && rec.v !== undefined) return rec.v;
+  loadFailedKeys.add(key);
+  return fallback;
 }
 function healStore(src, key, stamped){
   if (src === 'local') lsSet(key, stamped);
@@ -8384,30 +8414,32 @@ function onScrollForFab(){
 }
 
 async function init(){
+  mark('init');
   const [goal, checklist, calendar, leads, content, resources, activity, notes, links, trackedAccounts, savedLinks, qualifyConfig, navOrder, appSettings, meta, streak, ads, testimonials, shotList, brand, gamification, storyVault] = await Promise.all([
-    loadKey('goal', null),
-    loadKey('checklist', null),
-    loadKey('calendar', { posts: [] }),
-    loadKey('leads', []),
-    loadKey('content', null),
-    loadKey('resources', null),
-    loadKey('activity', []),
-    loadKey('notes', null),
-    loadKey('links', []),
-    loadKey('trackedAccounts', []),
-    loadKey('savedLinks', []),
-    loadKey('qualifyConfig', null),
-    loadKey('navOrder', []),
-    loadKey('settings', null),
-    loadKey('meta', null),
-    loadKey('streak', null),
-    loadKey('ads', null),
-    loadKey('testimonials', []),
-    loadKey('shotList', null),
-    loadKey('brand', null),
-    loadKey('gamification', null),
-    loadKey('storyVault', null),
+    loadKeyT('goal', null),
+    loadKeyT('checklist', null),
+    loadKeyT('calendar', { posts: [] }),
+    loadKeyT('leads', []),
+    loadKeyT('content', null),
+    loadKeyT('resources', null),
+    loadKeyT('activity', []),
+    loadKeyT('notes', null),
+    loadKeyT('links', []),
+    loadKeyT('trackedAccounts', []),
+    loadKeyT('savedLinks', []),
+    loadKeyT('qualifyConfig', null),
+    loadKeyT('navOrder', []),
+    loadKeyT('settings', null),
+    loadKeyT('meta', null),
+    loadKeyT('streak', null),
+    loadKeyT('ads', null),
+    loadKeyT('testimonials', []),
+    loadKeyT('shotList', null),
+    loadKeyT('brand', null),
+    loadKeyT('gamification', null),
+    loadKeyT('storyVault', null),
   ]);
+  mark('keys');
 
   state.goal = goal || { clients: 0, avgPrice: 0, target: DEFAULT_TARGET_MRR, deadline: DEFAULT_DEADLINE };
   if (state.goal.target === undefined) state.goal.target = DEFAULT_TARGET_MRR;
@@ -8513,13 +8545,18 @@ async function init(){
     if (!isNaN(asOf)) lastLocalChangeAt = asOf;
   }
 
+  mark('state');
   bindEventsOnce();
   applyTabAccent(activeTab);
-  await tryRestoreSyncHandle();
+  mark('sync');
+  // Desktop-only feature (File System Access); bounded so it can't hold up start-up.
+  if (!SAFE_MODE && !isPhoneOrTablet()) await withTimeout(tryRestoreSyncHandle(), 3000, undefined);
+  mark('synced');
 
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   window.__osaBooted = true;
+  mark('booted');
   if (SAFE_MODE) {
     let hasLocal = false;
     try { hasLocal = Object.keys(localStorage).some(k => k.indexOf(LS_PREFIX) === 0); } catch(e){}
@@ -8562,6 +8599,7 @@ function startDayRolloverWatcher(){
   }, 60000);
 }
 
+mark('call-init');
 init().catch(e => {
   console.error('init failed', e);
   if (window.__osaProblem) window.__osaProblem('Eroare la pornire: ' + ((e && e.message) || e));
