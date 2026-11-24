@@ -10,7 +10,7 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v17';
+  var BUILD = 'v18';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
   window.__osaPending = [];
@@ -384,7 +384,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v17</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v18</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -419,7 +419,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v17</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v18</p>
       </div>
     </div>
   </aside>
@@ -1692,13 +1692,23 @@ function sanitizeImportText(text){
     .replace(/ /g, ' ')
     .trim();
 }
+// Order matters: the text is tried EXACTLY as received first. The "clean-up"
+// (curly quotes -> straight quotes, zero-width characters out) is only a
+// repair for text mangled in transit — applied to a file that was never
+// mangled, it turns legitimate „ ” inside the person's own texts into
+// straight quotes and breaks perfectly valid JSON, which is exactly how a
+// good backup got rejected as "not a valid JSON".
 function tryParseImportJson(rawText){
+  const raw = String(rawText || '').replace(/^\uFEFF/, '').trim();
+  const attempts = [raw];
+  const rs = raw.indexOf('{'), re = raw.lastIndexOf('}');
+  if (rs >= 0 && re > rs) attempts.push(raw.slice(rs, re + 1));
   const cleaned = sanitizeImportText(rawText);
-  try { return JSON.parse(cleaned); } catch(e){ /* fall through */ }
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch(e){ /* give up below */ }
+  attempts.push(cleaned);
+  const cs = cleaned.indexOf('{'), ce = cleaned.lastIndexOf('}');
+  if (cs >= 0 && ce > cs) attempts.push(cleaned.slice(cs, ce + 1));
+  for (const t of attempts) {
+    try { const v = JSON.parse(t); if (v && typeof v === 'object') return v; } catch(e){ /* next */ }
   }
   return null;
 }
