@@ -343,7 +343,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v13</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v14</p>
       </div>
     </div>
   </aside>
@@ -906,6 +906,8 @@ let libraryView = 'materials'; // 'materials' | 'accounts' — the two Inspiraț
 let accountCategoryFilter = [];
 let accountSearch = '';
 let editAccountId = null;
+// Parcurgere — go through tracked accounts one by one, oldest-checked first
+let browseOpen = false, browseQueue = [], browseIdx = 0, browseOpenedCurrent = false, browseSeen = 0;
 let materialsAccountFilter = null; // account id — set via "Vezi materialele" cross-link from a tracked account
 let materialsShotListOnly = false; // when true, Materiale shows only links already added to the filming Shot List
 let testimonialTagFilter = [];
@@ -6147,6 +6149,115 @@ function markAccountChecked(id){
   saveKey('trackedAccounts', state.trackedAccounts);
   renderLibrary();
 }
+function filteredTrackedAccounts(){
+  let accounts = state.trackedAccounts.slice();
+  if (accountCategoryFilter.length) accounts = accounts.filter(a => a.categories.some(c => accountCategoryFilter.includes(c)));
+  if (accountSearch.trim()) {
+    const q = normalize(accountSearch);
+    accounts = accounts.filter(a => normalize(a.handle).includes(q) || a.categories.some(c => normalize(c).includes(q)) || normalize(a.note||'').includes(q));
+  }
+  return accounts;
+}
+function checkedToday(a){ return !!(a.lastCheckedAt && dateToISO(new Date(a.lastCheckedAt)) === todayISO()); }
+function browseOrder(list){
+  return list.slice().sort((a,b) => (a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0) - (b.lastCheckedAt ? new Date(b.lastCheckedAt).getTime() : 0));
+}
+function startBrowse(){
+  const pool = filteredTrackedAccounts();
+  if (!pool.length) { toast('Nu ai conturi în listă (sau filtrul nu lasă niciunul)', 'error'); return; }
+  let todo = pool.filter(a => !checkedToday(a));
+  if (!todo.length) { toast('Le-ai văzut pe toate azi — o iau de la capăt'); todo = pool; }
+  browseQueue = browseOrder(todo).map(a => a.id);
+  browseIdx = 0; browseOpenedCurrent = false; browseSeen = 0; browseOpen = true;
+  renderOverlay();
+}
+function closeBrowse(){
+  browseOpen = false; browseQueue = []; browseIdx = 0; browseOpenedCurrent = false;
+  renderOverlay();
+  if (activeTab === 'library') renderLibrary();
+}
+function browseCurrent(){
+  while (browseIdx < browseQueue.length) {
+    const a = state.trackedAccounts.find(x => x.id === browseQueue[browseIdx]);
+    if (a) return a;
+    browseQueue.splice(browseIdx, 1); // deleted meanwhile
+  }
+  return null;
+}
+function browseOpenProfile(){
+  const a = browseCurrent(); if (!a) return;
+  window.open(a.url, '_blank', 'noopener,noreferrer');
+  browseOpenedCurrent = true;
+  renderOverlay();
+}
+function browseNext(markSeen){
+  const a = browseCurrent(); if (!a) return;
+  if (markSeen) {
+    a.lastCheckedAt = new Date().toISOString();
+    saveKey('trackedAccounts', state.trackedAccounts);
+    browseSeen++;
+  }
+  browseIdx++; browseOpenedCurrent = false;
+  renderOverlay();
+}
+function browsePrev(){
+  if (browseIdx <= 0) return;
+  browseIdx--; browseOpenedCurrent = false;
+  renderOverlay();
+}
+function browseOverlayHtml(){
+  const total = browseQueue.length;
+  const a = browseCurrent();
+  const head = (title) => '<div class="overlay-head">' +
+      '<p class="h2">'+title+'</p>' +
+      '<button data-action="close-browse" class="icon-btn" aria-label="Închide">'+icon('x','icon')+'</button>' +
+    '</div>';
+  if (!a) {
+    return '<div class="overlay-backdrop" data-action="close-browse-backdrop"><div class="overlay-panel">' +
+      head('Parcurgere') +
+      '<div class="overlay-body flex-col gap-4" style="display:flex; align-items:center; text-align:center; padding-top:28px; padding-bottom:28px;">' +
+        '<p style="font-size:44px; line-height:1;">🎉</p>' +
+        '<p class="h2">Gata pe azi</p>' +
+        '<p class="text-sm muted">Ai văzut '+browseSeen+' '+(browseSeen===1?'cont':'conturi')+' din '+total+'.</p>' +
+        '<button data-action="close-browse" class="btn btn-primary w-full" style="justify-content:center;">Închide</button>' +
+      '</div></div></div>';
+  }
+  const pct = total ? Math.round((browseIdx / total) * 100) : 0;
+  const initial = (a.handle||'').replace(/^@/,'').charAt(0).toUpperCase() || '?';
+  const avatar = '<div style="width:84px; height:84px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,.06); border:2px solid var(--accent); margin:0 auto;">' +
+    (a.photo
+      ? '<img src="'+escapeAttr(a.photo)+'" alt="" style="width:100%; height:100%; object-fit:cover; display:block;" />'
+      : '<span style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:30px; font-weight:700; color:var(--text-faint);">'+escapeHtml(initial)+'</span>') +
+  '</div>';
+  const posts = (a.postLinks||[]).filter(p => p.embedUrl);
+  const previews = posts.length
+    ? '<div class="grid" style="grid-template-columns:repeat('+posts.length+',1fr); gap:6px;">' +
+        posts.map(p => '<a href="'+escapeAttr(p.url)+'" target="_blank" rel="noopener noreferrer" style="display:block; aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:#000;"><iframe src="'+escapeAttr(p.embedUrl)+'" style="width:100%; height:100%; border:0; display:block; pointer-events:none;" loading="lazy" title="Previzualizare"></iframe></a>').join('') +
+      '</div>'
+    : '';
+  const openBtnClass = browseOpenedCurrent ? 'btn' : 'btn btn-primary';
+  const nextBtnClass = browseOpenedCurrent ? 'btn btn-primary' : 'btn';
+  return '<div class="overlay-backdrop" data-action="close-browse-backdrop"><div class="overlay-panel">' +
+    head('Parcurgere · '+(browseIdx+1)+' / '+total) +
+    '<div class="overlay-body flex-col gap-4" style="display:flex;">' +
+      '<div style="height:6px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden;"><div style="height:100%; width:'+pct+'%; background:var(--accent); transition:width .25s;"></div></div>' +
+      '<div class="flex-col gap-2" style="display:flex; text-align:center;">' +
+        avatar +
+        '<p class="h2" style="word-break:break-word; margin-top:6px;">'+escapeHtml(a.handle)+'</p>' +
+        '<p class="text-xs mute3">'+daysAgoLabel(a.lastCheckedAt)+'</p>' +
+        (a.categories.length ? '<div class="flex flex-wrap gap-1" style="justify-content:center;">'+a.categories.map(c => '<span class="badge">#'+escapeHtml(c)+'</span>').join('')+'</div>' : '') +
+        (a.note ? '<p class="text-sm muted" style="line-height:1.5;">'+escapeHtml(a.note)+'</p>' : '') +
+      '</div>' +
+      previews +
+      '<button data-action="browse-open" class="'+openBtnClass+' w-full" style="justify-content:center; min-height:52px; font-size:16px;">'+icon('external','icon-sm')+(browseOpenedCurrent ? 'Deschide din nou' : 'Deschide profilul')+'</button>' +
+      '<button data-action="browse-next" class="'+nextBtnClass+' w-full" style="justify-content:center; min-height:52px; font-size:16px;">'+icon('check','icon-sm')+'Văzut → următorul</button>' +
+      '<div class="flex gap-2">' +
+        '<button data-action="browse-prev" class="btn btn-sm flex-1" style="justify-content:center;"'+(browseIdx===0?' disabled':'')+'>← Înapoi</button>' +
+        '<button data-action="browse-skip" class="btn btn-sm flex-1" style="justify-content:center;">Sari peste →</button>' +
+      '</div>' +
+      '<p class="text-xs mute3" style="text-align:center;">Instagram se deschide separat. Când revii aici, apeși „Văzut → următorul”.</p>' +
+    '</div></div></div>';
+}
 function toggleAccountCategoryFilter(cat){
   const i = accountCategoryFilter.indexOf(cat);
   if (i >= 0) accountCategoryFilter.splice(i,1); else accountCategoryFilter.push(cat);
@@ -6596,12 +6707,14 @@ function renderMaterialsSection(){
 }
 function renderTrackedAccountsSection(){
   const allCategories = Array.from(new Set(state.trackedAccounts.flatMap(a => a.categories))).sort();
-  let accounts = state.trackedAccounts.slice();
-  if (accountCategoryFilter.length) accounts = accounts.filter(a => a.categories.some(c => accountCategoryFilter.includes(c)));
-  if (accountSearch.trim()) {
-    const q = normalize(accountSearch);
-    accounts = accounts.filter(a => normalize(a.handle).includes(q) || a.categories.some(c => normalize(c).includes(q)) || normalize(a.note||'').includes(q));
-  }
+  const accounts = filteredTrackedAccounts();
+  const leftToday = accounts.filter(a => !checkedToday(a)).length;
+  const browseCard = state.trackedAccounts.length
+    ? '<button data-action="start-browse" class="btn btn-primary w-full" style="justify-content:center; min-height:52px; font-size:16px;">▶ Parcurge conturile' +
+        (accounts.length ? ' · '+(leftToday ? leftToday+' de văzut azi' : 'toate văzute azi ✓') : '') +
+        ((accountCategoryFilter.length || accountSearch.trim()) ? ' (filtrate)' : '') +
+      '</button>'
+    : '';
 
   const accountCardHtml = (a) => {
     const editing = editAccountId === a.id;
@@ -6670,6 +6783,7 @@ function renderTrackedAccountsSection(){
   };
 
   return (
+    browseCard +
     '<div class="card">' +
       '<p class="eyebrow" style="margin-bottom:10px;">Adaugă un cont de Instagram urmărit</p>' +
       '<div class="flex flex-wrap gap-2">' +
@@ -7187,6 +7301,7 @@ function renderOverlay(){
   else if (snippetOpenFor) { root.innerHTML = snippetOverlayHtml(); }
   else if (syncOpen) { root.innerHTML = syncOverlayHtml(); }
   else if (moreMenuOpen) { root.innerHTML = moreMenuOverlayHtml(); }
+  else if (browseOpen) { root.innerHTML = browseOverlayHtml(); }
   else { root.innerHTML = ''; lastOverlayScrollTop = 0; return; }
   const newBody = root.querySelector('.overlay-body');
   if (newBody && prevScroll) newBody.scrollTop = prevScroll;
@@ -7905,6 +8020,13 @@ function onContentClick(e){
   else if (action === 'delete-account-photo') deleteAccountPhoto(el.dataset.id);
   else if (action === 'open-account') openTrackedAccount(el.dataset.id);
   else if (action === 'mark-account-checked') markAccountChecked(el.dataset.id);
+  else if (action === 'start-browse') startBrowse();
+  else if (action === 'close-browse') closeBrowse();
+  else if (action === 'close-browse-backdrop') { if (e.target === el) closeBrowse(); }
+  else if (action === 'browse-open') browseOpenProfile();
+  else if (action === 'browse-next') browseNext(true);
+  else if (action === 'browse-skip') browseNext(false);
+  else if (action === 'browse-prev') browsePrev();
   else if (action === 'toggle-account-category') toggleAccountCategoryFilter(el.dataset.cat);
   else if (action === 'edit-account') startEditAccount(el.dataset.id);
   else if (action === 'save-account') saveEditAccount(el.dataset.id);
@@ -8045,7 +8167,7 @@ function onGlobalBlur(e){
    INIT
 ========================================================= */
 function anyOverlayOpen(){
-  return !!(notesOpen || paymentsOpenFor || qualifyOpenFor || clientSummaryFor || outreachPickerFor || postDetailFor || snippetOpenFor || syncOpen || moreMenuOpen || filmingMode || fabMenuOpen || leadQuickMenuFor || ctaPickerOpen);
+  return !!(notesOpen || paymentsOpenFor || qualifyOpenFor || clientSummaryFor || outreachPickerFor || postDetailFor || snippetOpenFor || syncOpen || moreMenuOpen || filmingMode || fabMenuOpen || leadQuickMenuFor || ctaPickerOpen || browseOpen);
 }
 function onGlobalKeydown(e){
   if (e.key === 'Escape') {
@@ -8061,6 +8183,7 @@ function onGlobalKeydown(e){
     if (filmingMode) { closeFilmingMode(); return; }
     if (fabMenuOpen) { closeFabMenu(); return; }
     if (leadQuickMenuFor) { closeLeadQuickMenu(); return; }
+    if (browseOpen) { closeBrowse(); return; }
     return;
   }
   if (!e.altKey) return;
