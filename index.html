@@ -10,7 +10,7 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v19';
+  var BUILD = 'v20';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
   window.__osaPending = [];
@@ -423,7 +423,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v19</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v20</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -458,7 +458,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v19</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v20</p>
       </div>
     </div>
   </aside>
@@ -1026,6 +1026,9 @@ let libraryView = 'materials'; // 'materials' | 'accounts' — the two Inspiraț
 let accountCategoryFilter = [];
 let accountSearch = '';
 let editAccountId = null;
+let groupByCat = true;           // group accounts + materials by category/tag
+try { if (localStorage.getItem('osa_groupByCat') === '0') groupByCat = false; } catch(e) {}
+let expandedGroups = new Set();  // keys like 'acc:mancare' / 'mat:TOFU'
 let accountView = 'todo';   // 'todo' | 'all' | 'done'
 let accountSort = 'oldest'; // 'oldest' | 'az' | 'new'
 let accountAddOpen = false;
@@ -6475,8 +6478,9 @@ function checkedToday(a){ const t = checkedTs(a); return !!t && dateToISO(new Da
 function browseOrder(list){
   return list.slice().sort((a,b) => checkedTs(a) - checkedTs(b));
 }
-function startBrowse(){
-  const pool = filteredTrackedAccounts();
+function startBrowse(onlyCat){
+  let pool = filteredTrackedAccounts();
+  if (typeof onlyCat === 'string' && onlyCat) pool = pool.filter(a => (a.categories || [])[0] === onlyCat);
   if (!pool.length) { toast('Nu ai conturi în listă (sau filtrul nu lasă niciunul)', 'error'); return; }
   let todo = pool.filter(a => !checkedToday(a));
   if (!todo.length) { toast('Le-ai văzut pe toate azi — o iau de la capăt'); todo = pool; }
@@ -6872,6 +6876,34 @@ function renderTestimonials(){
   '</div>';
 }
 
+function groupToggleHtml(){
+  return '<div class="seg" style="max-width:360px;">' +
+    '<button type="button" data-action="set-group-mode" data-mode="1" class="'+(groupByCat?'sel':'')+'">🗂 Pe categorii</button>' +
+    '<button type="button" data-action="set-group-mode" data-mode="0" class="'+(!groupByCat?'sel':'')+'">☰ Listă</button>' +
+  '</div>';
+}
+function groupSectionHtml(key, title, count, open, bodyHtml, extraBtn){
+  return '<div class="card" style="padding:0; overflow:hidden;">' +
+    '<div class="flex items-center" style="gap:8px; padding:6px 8px 6px 0;">' +
+      '<button type="button" data-action="toggle-group" data-key="'+escapeAttr(key)+'" class="flex items-center justify-between" style="flex:1; background:none; border:none; padding:12px 14px; color:inherit; text-align:left; cursor:pointer; min-width:0;">' +
+        '<span style="font-weight:700; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+title+' <span class="mute3" style="font-weight:500;">· '+count+'</span></span>' +
+        icon(open?'chevronDown':'chevronRight','icon-sm') +
+      '</button>' + (extraBtn||'') +
+    '</div>' +
+    (open ? '<div style="padding:0 10px 12px;">'+bodyHtml+'</div>' : '') +
+  '</div>';
+}
+function groupItemsByKey(items, keysOf, noneLabel){
+  const map = new Map();
+  items.forEach(it => {
+    const ks = keysOf(it); const k = (ks && ks.length) ? ks[0] : '';
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(it);
+  });
+  const names = Array.from(map.keys()).filter(Boolean).sort((a,b) => normalize(a).localeCompare(normalize(b)));
+  if (map.has('')) names.push('');
+  return names.map(k => ({ key: k, label: k ? '#'+k : noneLabel, items: map.get(k) }));
+}
 function renderLibrary(){
   const tabSwitcher = '<div class="flex gap-2">' +
     '<button data-action="switch-library-view" data-view="materials" class="btn'+(libraryView==='materials'?' btn-primary':'')+'" style="justify-content:center;">'+icon('play','icon-sm')+'Materiale ('+state.links.length+')</button>' +
@@ -7015,8 +7047,19 @@ function renderMaterialsSection(){
       '<input id="link-search-input" type="text" placeholder="Caută în link-uri sau taguri…" value="'+escapeAttr(linkSearch)+'" class="flex-1" />' +
     '</div>' +
 
-    (links.length
-      ? '<div class="grid grid-1-2">' + links.map(cardHtml).join('') + '</div>'
+    groupToggleHtml() +
+
+    (links.length && groupByCat
+      ? (() => {
+          const groups = groupItemsByKey(links, l => l.tags || [], 'Fără tag');
+          const forceOpen = !!(linkTagFilter.length || linkSearch.trim() || materialsAccountFilter || materialsShotListOnly) || groups.length === 1;
+          return '<div class="flex-col gap-2" style="display:flex;">' + groups.map(g => {
+            const key = 'mat:' + g.key;
+            const open = forceOpen || expandedGroups.has(key);
+            return groupSectionHtml(key, escapeHtml(g.label), g.items.length, open, '<div class="grid grid-1-2">' + g.items.map(cardHtml).join('') + '</div>');
+          }).join('') + '</div>';
+        })()
+      : links.length ? '<div class="grid grid-1-2">' + links.map(cardHtml).join('') + '</div>'
       : '<div class="card text-center" style="padding:40px 20px;"><p class="text-sm muted">'+(state.links.length ? 'Niciun link nu corespunde filtrului.' : 'Niciun link salvat încă.')+'</p><p class="text-xs mute3 mt-1">'+(state.links.length ? '' : 'Lipește mai sus un link de Instagram sau TikTok pentru a începe.')+'</p></div>'
     )
   );
@@ -7135,12 +7178,23 @@ function renderTrackedAccountsSection(){
   };
 
   let listHtml;
-  if (accounts.length) listHtml = '<div class="acc-list">' + accounts.map(rowHtml).join('') + '</div>';
+  if (accounts.length && groupByCat) {
+    const groups = groupItemsByKey(accounts, a => a.categories || [], 'Fără categorie');
+    const forceOpen = filtered || groups.length === 1;
+    listHtml = '<div class="flex-col gap-2" style="display:flex;">' + groups.map(g => {
+      const key = 'acc:' + g.key;
+      const open = forceOpen || expandedGroups.has(key) || g.items.some(a => a.id === expandedAccountId);
+      const left = g.items.filter(a => !checkedToday(a)).length;
+      const goBtn = g.key && left ? '<button type="button" data-action="browse-group" data-cat="'+escapeAttr(g.key)+'" class="btn btn-sm btn-primary shrink-0" style="margin-right:2px;">▶ '+left+'</button>' : '';
+      return groupSectionHtml(key, escapeHtml(g.label), g.items.length, open, '<div class="acc-list">' + g.items.map(rowHtml).join('') + '</div>', goBtn);
+    }).join('') + '</div>';
+  }
+  else if (accounts.length) listHtml = '<div class="acc-list">' + accounts.map(rowHtml).join('') + '</div>';
   else if (!state.trackedAccounts.length) listHtml = '<div class="card text-center" style="padding:32px 20px;"><p class="text-sm muted">Niciun cont urmărit încă.</p><p class="text-xs mute3 mt-1">Apasă „＋ Adaugă conturi” și lipește mai multe @handle-uri deodată.</p></div>';
   else if (accountView === 'todo' && !filtered) listHtml = '<div class="card text-center" style="padding:32px 20px;"><p style="font-size:34px;">🎉</p><p class="text-sm">Le-ai văzut pe toate azi</p><button data-action="set-account-view" data-view="all" class="btn btn-sm" style="margin-top:10px;">Vezi toate conturile</button></div>';
   else listHtml = '<div class="card text-center" style="padding:28px 20px;"><p class="text-sm muted">Niciun cont aici.</p>'+(filtered?'<button data-action="clear-account-filters" class="btn btn-sm" style="margin-top:10px;">Șterge filtrele</button>':'')+'</div>';
 
-  return '<div class="flex-col gap-3" style="display:flex;">' + summary + seg + chips + tools + listHtml + addBlock + '</div>';
+  return '<div class="flex-col gap-3" style="display:flex;">' + summary + seg + groupToggleHtml() + chips + tools + listHtml + addBlock + '</div>';
 }
 
 function renderQuickDesk(){
@@ -8363,6 +8417,9 @@ function onContentClick(e){
   else if (action === 'open-account') openTrackedAccount(el.dataset.id);
   else if (action === 'mark-account-checked') markAccountChecked(el.dataset.id);
   else if (action === 'start-browse') startBrowse();
+  else if (action === 'browse-group') startBrowse(el.dataset.cat);
+  else if (action === 'toggle-group') { const k = el.dataset.key; if (expandedGroups.has(k)) expandedGroups.delete(k); else expandedGroups.add(k); renderLibrary(); }
+  else if (action === 'set-group-mode') { groupByCat = el.dataset.mode === '1'; try { localStorage.setItem('osa_groupByCat', groupByCat ? '1' : '0'); } catch(e) {} renderLibrary(); }
   else if (action === 'close-browse') closeBrowse();
   else if (action === 'close-browse-backdrop') { if (e.target === el) closeBrowse(); }
   else if (action === 'browse-open') browseOpenProfile();
