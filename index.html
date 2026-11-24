@@ -10,7 +10,7 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v20';
+  var BUILD = 'v21';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
   window.__osaPending = [];
@@ -256,13 +256,19 @@
   .sec-chip{flex:1 0 auto; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:11px 14px; border-radius:12px; border:1px solid var(--line); background:var(--elevated); color:var(--text-dim); font-size:14px; font-weight:600; white-space:nowrap;}
   .sec-chip.sel{background:var(--accent-soft); border-color:var(--accent-border); color:var(--text);}
   .sec-chip .cnt{font-size:11px; font-weight:700; opacity:.7;}
-  .day-strip{display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
+  .day-strip{position:relative; display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none;}
   .day-strip::-webkit-scrollbar{display:none;}
   .day-chip{flex:0 0 58px; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px 7px; border-radius:14px; border:1px solid var(--line); background:var(--elevated); color:var(--text-dim);}
   .day-chip .dc-name{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; opacity:.8;}
   .day-chip .dc-num{font-size:18px; font-weight:800; line-height:1.15;}
   .day-chip .dc-dots{display:flex; gap:3px; height:6px; align-items:center;}
   .day-chip .dc-dots i{display:block; width:6px; height:6px; border-radius:50%;}
+  .day-chip .dc-dots i.empty{background:transparent !important; border:1px dashed var(--text-faint);}
+  .day-chip.sel .dc-dots i.empty{border-color:rgba(0,0,0,.45);}
+  .day-nav{display:flex; align-items:center; gap:6px;}
+  .day-pick{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .day-pick button{padding:8px 11px; border-radius:10px; border:1px solid var(--line); background:var(--elevated); color:var(--text); font-size:13px; font-weight:600;}
+  .day-pick button.today{border-color:var(--accent-border); color:var(--accent);}
   .day-chip.today:not(.sel){border-color:var(--accent-border); color:var(--text);}
   .day-chip.sel{background:var(--accent); border-color:var(--accent); color:#0A0A0A;}
   .day-solo .day-col{flex:none; width:100%;}
@@ -423,7 +429,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v20</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v21</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -458,7 +464,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v20</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v21</p>
       </div>
     </div>
   </aside>
@@ -5327,6 +5333,7 @@ let contentSection = 'calendar'; // 'calendar' | 'ideas' | 'script' | 'shots'
 let selectedCalDay = null; // ISO of the day shown in the calendar panel
 let ideaSearch = '';
 let lastQuickPillar = 'tehnic';
+let schedulingIdeaKey = null; // 'pillar:id' of the idea showing its day picker
 function contentSubNavHtml(){
   return '<div class="flex gap-2" style="margin-bottom:16px;">' +
     '<button data-action="set-content-subtab" data-subtab="posts" class="btn'+(contentSubTab==='posts'?' btn-active':'')+'">'+icon('calendar','icon-sm')+'Postări</button>' +
@@ -5356,7 +5363,55 @@ function addQuickPost(iso){
   selectedCalDay = iso;
   render();
   toast('Postare adăugată');
+  const nx = document.getElementById('quick-post-' + iso); if (nx) { try { nx.focus({preventScroll:true}); } catch(e) {} }
 }
+function makePostFromIdea(picked, iso){
+  const post = { id: uid(), date: iso, pillar: picked.pillar, idea: picked.text, status: 'idee', sourceIdeaId: picked.id };
+  if (picked.hook) post.hook = picked.hook;
+  if (picked.body) post.body = picked.body;
+  if (picked.cta) post.cta = picked.cta;
+  if (picked.scope) post.scope = picked.scope;
+  post.format = picked.format || SMART_TAG_DEFAULT_FORMAT;
+  return post;
+}
+function scheduleIdeaOnDay(pillar, id, iso){
+  const picked = allIdeasFlat().find(i => i.id === id);
+  if (!picked) return;
+  pushUndo();
+  state.calendar.posts.push(makePostFromIdea(picked, iso));
+  saveKey('calendar', state.calendar);
+  schedulingIdeaKey = null;
+  selectedCalDay = iso;
+  renderCalendar();
+  toast('Programată pe ' + formatDateRO(iso));
+}
+function addRandomIdea(iso){
+  const used = new Set(state.calendar.posts.map(p => p.sourceIdeaId).filter(Boolean));
+  const all = allIdeasFlat();
+  let pool = all.filter(i => !used.has(i.id));
+  if (!pool.length) pool = all;
+  if (!pool.length) { toast('Nu ai idei în bancă încă — adaugă din secțiunea Idei', 'error'); return; }
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+  pushUndo();
+  state.calendar.posts.push(makePostFromIdea(picked, iso));
+  saveKey('calendar', state.calendar);
+  selectedCalDay = iso;
+  render();
+  toast('Idee adăugată: ' + picked.text.slice(0, 40));
+}
+function stepCalDay(step){
+  const base = selectedCalDay ? new Date(selectedCalDay + 'T12:00:00') : new Date();
+  base.setDate(base.getDate() + step);
+  const iso = dateToISO(base);
+  for (let i = 0; i < 80; i++) {
+    const w = getCalendarDates(weekOffset * 7);
+    if (w.some(d => dateToISO(d) === iso)) break;
+    weekOffset += (iso < dateToISO(w[0])) ? -1 : 1;
+  }
+  selectedCalDay = iso;
+  renderCalendar();
+}
+function goCalToday(){ weekOffset = 0; selectedCalDay = todayISO(); renderCalendar(); }
 function addIdeaQuick(){
   const inp = document.getElementById('quick-idea-input');
   const sel = document.getElementById('quick-idea-pillar');
@@ -5401,10 +5456,14 @@ function renderContentPosts(){
     const dayStoryTypeIsRecommended = dayStoryTypeExplicit === undefined && dayStoryType.length > 0;
     return '<div class="day-col'+(isToday?' today':'')+'">' +
       '<div class="flex items-end justify-between mb-2" style="margin-bottom:10px;">' +
-        '<p class="text-sm" style="font-weight:600; color:'+(isToday?'var(--accent)':'rgba(245,245,240,.8)')+';">'+dayName+(isToday?' · azi':'')+'</p>' +
-        '<p class="text-xs mute3 tabular">'+formatShortDate(d)+'</p>' +
+        '<div class="day-nav">' +
+          '<button type="button" data-action="cal-day-step" data-step="-1" class="icon-btn" aria-label="Ziua anterioară">'+icon('chevronLeft','icon-sm')+'</button>' +
+          '<p class="text-sm" style="font-weight:700; margin:0; color:'+(isToday?'var(--accent)':'rgba(245,245,240,.9)')+';">'+dayName+(isToday?' · azi':'')+' <span class="mute3 tabular" style="font-weight:500;">'+formatShortDate(d)+'</span></p>' +
+          '<button type="button" data-action="cal-day-step" data-step="1" class="icon-btn" aria-label="Ziua următoare">'+icon('chevronRight','icon-sm')+'</button>' +
+        '</div>' +
+        (isToday ? '' : '<button type="button" data-action="cal-go-today" class="btn btn-sm">Azi</button>') +
       '</div>' +
-      '<select data-daytype="'+iso+'" class="mb-1" style="font-size:11px; margin-bottom:6px; color:'+(dayType ? (contentTypeStage(dayType)||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
+      '<select data-daytype=""'+iso+'" class="mb-1" style="font-size:11px; margin-bottom:6px; color:'+(dayType ? (contentTypeStage(dayType)||{}).color || 'var(--accent)' : 'var(--text-faint)')+';">' +
         '<option value="">Etapă funnel — nesetat</option>' +
         CONTENT_TYPES.map(grp =>
           '<optgroup label="'+grp.stage+'">' +
@@ -5455,6 +5514,7 @@ function renderContentPosts(){
           '<select id="quick-pillar-'+iso+'" class="flex-1" style="font-size:12px;">'+pillarOptions(lastQuickPillar)+'</select>' +
           '<button data-action="add-quick-post" data-date="'+iso+'" class="btn btn-primary shrink-0">'+icon('plus','icon-sm')+'Adaugă</button>' +
         '</div>' +
+        '<button data-action="add-random-idea" data-date="'+iso+'" class="btn btn-sm w-full" style="justify-content:center;">🎲 Dă-mi o idee la întâmplare</button>' +
         '<details class="more-actions"><summary>… sau alege din banca de idei</summary>' +
           '<div class="flex-col gap-2" style="display:flex; margin-top:8px;">' +
             '<select id="post-idea-'+iso+'" style="font-size:12px;">' +
@@ -5519,12 +5579,16 @@ function renderContentPosts(){
               '<p data-action="edit-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="text-xs flex-1" style="line-height:1.4; color:rgba(245,245,240,.7); cursor:text; min-width:140px;" title="Click pentru editare rapidă">'+escapeHtml(it.text)+'</p>' +
               '<div class="row-actions">' +
                 (hasExtra ? '<button data-action="toggle-idea-expand" data-key="'+ideaKey+'" class="icon-btn" aria-label="Detalii" title="Arată scriptul complet sau detaliile din link (Hook/Body/Unghi/CTA)">'+icon(expanded?'chevronDown':'chevronRight','icon-sm')+'</button>' : '') +
+                '<button data-action="schedule-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="icon-btn" style="'+(schedulingIdeaKey===ideaKey?'color:var(--accent);':'')+'" aria-label="Programează" title="Pune în calendar">'+icon('calendar','icon-sm')+'</button>' +
                 '<button data-action="copy-idea" data-text="'+escapeAttr(it.text)+'" class="icon-btn" aria-label="Copiază">'+icon('copy','icon-sm')+'</button>' +
                 '<button data-action="add-shot" data-pillar="'+k+'" data-id="'+it.id+'" class="icon-btn" style="'+(shotSourceIdeaIds.has(it.id)?'color:var(--accent);':'')+'" aria-label="Adaugă în Shot List" title="'+(shotSourceIdeaIds.has(it.id)?'Deja e în Shot List (filmare)':'Adaugă această idee în lista de filmat (Modul Filmare)')+'">'+icon('film','icon-sm')+'</button>' +
                 '<button data-action="edit-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="icon-btn" aria-label="Editează">'+icon('edit','icon-sm')+'</button>' +
                 '<button data-action="remove-idea" data-pillar="'+k+'" data-id="'+it.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
               '</div>' +
             '</div>' +
+            (schedulingIdeaKey === ideaKey ? '<div style="margin-top:8px; border-top:1px solid var(--line); padding-top:8px;"><p class="text-xs mute2" style="margin:0;">În ce zi o postezi?</p><div class="day-pick">' +
+              getCalendarDates(0).slice(0,10).map((dd,i) => '<button type="button" data-action="schedule-idea-day" data-pillar="'+k+'" data-id="'+it.id+'" data-date="'+dateToISO(dd)+'" class="'+(i===0?'today':'')+'">'+(i===0?'Azi':i===1?'Mâine':RO_DAYS_SHORT[(dd.getDay()+6)%7]+' '+dd.getDate())+'</button>').join('') +
+              '</div></div>' : '') +
             (it.body ? '<div style="margin-top:6px;"><span class="badge" style="font-size:10px;">📝 Script complet</span></div>' : '') +
             (it.angle && !it.body ? '<div style="margin-top:6px;"><span class="badge" style="font-size:10px;">🔗 Din link</span></div>' : '') +
             (hasExtra && expanded
@@ -5601,6 +5665,9 @@ function renderContentPosts(){
     '</div>';
   }).join('');
 
+  const weekPosts = week.reduce((n,d) => n + state.calendar.posts.filter(p => p.date === dateToISO(d)).length, 0);
+  const emptyDays = week.filter(d => !state.calendar.posts.some(p => p.date === dateToISO(d))).length;
+  const weekSummary = weekPosts + (weekPosts===1?' postare':' postări') + ' · ' + emptyDays + (emptyDays===1?' zi liberă':' zile libere');
   const selISO = (selectedCalDay && week.some(d => dateToISO(d) === selectedCalDay)) ? selectedCalDay
     : (week.some(d => dateToISO(d) === t) ? t : dateToISO(week[0]));
   selectedCalDay = selISO;
@@ -5612,7 +5679,7 @@ function renderContentPosts(){
     return '<button type="button" data-action="select-cal-day" data-date="'+iso+'" class="day-chip'+(iso===t?' today':'')+(iso===selISO?' sel':'')+'">' +
       '<span class="dc-name">'+RO_DAYS_SHORT[(d.getDay() + 6) % 7]+'</span>' +
       '<span class="dc-num">'+d.getDate()+'</span>' +
-      '<span class="dc-dots">'+ps.slice(0,4).map(p => '<i style="background:'+(POST_STATUS_COLORS[p.status]||'#888')+'"></i>').join('')+'</span>' +
+      '<span class="dc-dots">'+(ps.length ? ps.slice(0,4).map(p => '<i style="background:'+(POST_STATUS_COLORS[p.status]||'#888')+'"></i>').join('') : '<i class="empty"></i>')+'</span>' +
     '</button>';
   }).join('') + '</div>';
 
@@ -5624,7 +5691,7 @@ function renderContentPosts(){
     (contentSection === 'calendar' ? (
     '<div>' +
       '<div class="flex items-center justify-between flex-wrap gap-3 mb-4" style="margin-bottom:14px;">' +
-        '<p class="text-sm" style="font-weight:600;">Alege ziua, apoi adaugă postarea</p>' +
+        '<p class="text-sm" style="font-weight:600; margin:6px 0 0;">'+weekSummary+'</p>' +
         '<div class="flex items-center gap-2">' +
           '<button data-action="week-prev" class="btn btn-icon">'+icon('chevronLeft','icon-sm')+'</button>' +
           '<span class="text-xs mute2 tabular" style="width:150px; text-align:center;">'+rangeLabel+'</span>' +
@@ -5748,9 +5815,10 @@ function renderContentPosts(){
                     '<button data-action="remove-shot" data-id="'+s.id+'" class="icon-btn danger" aria-label="Șterge">'+icon('trash','icon-sm')+'</button>' +
                   '</div>' +
                 '</div>' +
+                scheduleBlock +
+                '<details class="more-actions"><summary>⋯ Script, video și detalii filmare</summary>' +
                 (videoPreview ? '<div style="margin-top:10px;">'+videoPreview+'</div>' : '') +
                 filmingNotes +
-                scheduleBlock +
                 '<div class="grid" style="grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">' +
                   '<div><label class="field-label">Locație</label><input data-shot="'+s.id+'" data-shotfield="location" type="text" value="'+escapeAttr(s.location)+'" placeholder="ex: sală" /></div>' +
                   '<div><label class="field-label">Ținută</label><input data-shot="'+s.id+'" data-shotfield="outfit" type="text" value="'+escapeAttr(s.outfit)+'" placeholder="ex: negru" /></div>' +
@@ -5762,6 +5830,7 @@ function renderContentPosts(){
                     EFFORT_TAGS.map(e => '<option value="'+e.key+'" '+((s.effort||'mediu')===e.key?'selected':'')+'>'+e.label+'</option>').join('') +
                   '</select></div>' +
                 '</div>' +
+                '</details>' +
               '</div>';
             }).join('') +
           '</div>'
@@ -5770,6 +5839,10 @@ function renderContentPosts(){
     ) : '') +
 
   '</div>';
+  try {
+    const strip = document.querySelector('.day-strip'), chip = strip && strip.querySelector('.day-chip.sel');
+    if (strip && chip) strip.scrollLeft = chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2;
+  } catch(e) {}
 }
 function renderContentStory(){
   const week = getCalendarDates(weekOffset*7);
@@ -8162,6 +8235,11 @@ function onContentClick(e){
   else if (action === 'add-post') addPost(el.dataset.date);
   else if (action === 'add-quick-post') addQuickPost(el.dataset.date);
   else if (action === 'add-idea-quick') addIdeaQuick();
+  else if (action === 'add-random-idea') addRandomIdea(el.dataset.date);
+  else if (action === 'cal-day-step') stepCalDay(parseInt(el.dataset.step, 10) || 0);
+  else if (action === 'cal-go-today') goCalToday();
+  else if (action === 'schedule-idea') { const k = el.dataset.pillar + ':' + el.dataset.id; schedulingIdeaKey = (schedulingIdeaKey === k) ? null : k; renderCalendar(); }
+  else if (action === 'schedule-idea-day') scheduleIdeaOnDay(el.dataset.pillar, el.dataset.id, el.dataset.date);
   else if (action === 'set-content-section') { contentSection = el.dataset.section; renderCalendar(); window.scrollTo(0,0); }
   else if (action === 'select-cal-day') { selectedCalDay = el.dataset.date; renderCalendar(); }
   else if (action === 'cycle-status') cyclePostStatus(el.dataset.id);
