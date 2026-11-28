@@ -10,7 +10,7 @@
    If the app hasn't shown its UI within 8s it first retries once in safe
    mode (no IndexedDB), then shows what went wrong with ways out. */
 (function(){
-  var BUILD = 'v27';
+  var BUILD = 'v28';
   window.__osaBuild = BUILD;
   window.__osaBooted = false;
   window.__osaPending = [];
@@ -1152,6 +1152,14 @@
   @media (max-width:520px){ .cx-mrepo{display:none;} }
   /* în Conținut, butonul + global acoperea cardurile; studioul are propriile butoane de adăugat */
   body.cx-tab .fab-button, body.cx-tab #fab-menu-root{display:none !important;}
+  /* v28: sincronizarea */
+  .cx-syncc{margin-bottom:14px;}
+  .cx-sync-vs{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .cx-sync-side{border:1px solid var(--cx-line2); border-radius:14px; padding:12px; background:var(--cx-sunk);}
+  .cx-sync-side ul{list-style:none; margin:0; padding:0; display:grid; gap:4px; font-size:13.5px; color:var(--cx-dim);}
+  .cx-sync-side b{color:var(--cx-chalk); font-size:17px; margin-right:4px;}
+  .cx-col{display:flex; flex-direction:column;}
+  @media (max-width:420px){ .cx-sync-vs{grid-template-columns:1fr;} }
 
 </style>
 </head>
@@ -1159,7 +1167,7 @@
 
 <div id="loading" class="flex flex-col items-center justify-center gap-3" style="min-height:100vh;">
   <div class="spinner"></div>
-  <p class="text-xs mute2">Se încarcă OS Antrenor… v27</p>
+  <p class="text-xs mute2">Se încarcă OS Antrenor… v28</p>
 </div>
 
 <div id="app" class="app-shell hidden">
@@ -1194,7 +1202,7 @@
           <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V5"/><path d="M7 10l5-5 5 5"/><path d="M5 21h14"/></svg>
           Importă backup
         </button>
-        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v27</p>
+        <p class="text-xs mute3" style="text-align:center; margin-top:6px;">build v28</p>
       </div>
     </div>
   </aside>
@@ -2224,7 +2232,7 @@ async function saveKey(key, value){
   // overwriting it — the root of "always copies from the computer").
   if (key !== 'meta') {
     scheduleSyncFileWrite();
-    if (!HOUSEKEEPING_KEYS[key]) lastLocalChangeAt = Date.now();
+    if (!HOUSEKEEPING_KEYS[key]) { lastLocalChangeAt = Date.now(); if (typeof cxSyncSchedule === 'function') cxSyncSchedule(); }
   }
   const stamped = { t: Date.now(), v: value };
 
@@ -2424,6 +2432,7 @@ function buildExportPayload(){
 }
 function applyImportedData(parsed){
   const d = parsed && parsed.data ? parsed.data : parsed;
+  const __cxRepo = cxRepoNow();
   if (!d || typeof d !== 'object' || (!d.goal && !d.leads && !d.checklist)) return false;
   state.goal = d.goal || state.goal;
   // Only trust an imported checklist if it actually has the shape every
@@ -2440,6 +2449,7 @@ function applyImportedData(parsed){
       : { date: todayISO(), checked: {}, categories: carryOverChecklistCategories(d.checklist) };
   }
   state.calendar = d.calendar || state.calendar;
+  cxRepoKeep(__cxRepo);
   state.leads = normalizeLeads(d.leads || state.leads);
   state.content = d.content || state.content;
   state.resources = d.resources || state.resources;
@@ -9883,7 +9893,7 @@ function cxAutomatHtml(){
   const stale = ready ? cxMotorStale(jobs) : null;
   if (stale) h += '<div class="cx-panel cx-stale"><p class="cx-h-sm" style="margin:0 0 4px;">'+cxIco('alert')+'Claude n-a preluat cererea de '+cxE(cxDurata(stale.act))+'</p>' +
     '<p class="cx-small cx-dim" style="margin:0;">„'+cxE(stale.titlu)+'” așteaptă. Sarcina de pe Mac pornește din oră în oră, între 7 și 23. Verifică să fie MacBook-ul pornit și treaz, cu aplicația Claude deschisă.</p></div>';
-  if (ready) h += cxMacHtml();
+  if (ready) h += cxMacHtml() + cxSyncCardHtml();
   if (!ready) {
     const R = 'os-antrenor-motor';
     h += '<div class="cx-panel cx-setup"><p class="cx-h-sm">Ce mai lipsește, o singură dată</p>' +
@@ -9985,6 +9995,7 @@ function cxPublishBlockHtml(p){
 
 /* ---------- foi mici ---------- */
 function cxMotorSheetHtml(S, p){
+  if (String(S.type || '').indexOf('sync-') === 0) return cxSyncSheetHtml(S);
   if (S.type === 'motor') {
     const m = cxMotor(), sec = cxSecret();
     const res = S.test ? '<div class="cx-test">' + S.test.map(x => '<p class="'+(x[0] ? 'ok' : 'bad')+'">'+cxIco(x[0] ? 'check' : 'x')+cxE(x[1])+'</p>').join('') + '</div>' : '';
@@ -10027,6 +10038,7 @@ function cxMotorSheetHtml(S, p){
 /* ---------- acțiuni ---------- */
 function cxJobById(id){ return cxMotor().jobs.find(j => j.id === id) || null; }
 function cxMotorClick(action, el, e){
+  if (action.indexOf('cx-m-sync-') === 0) return cxSyncClick(action);
   const d = el.dataset, m = cxMotor();
   const p = cxEditId ? cxPost(cxEditId) : null;
   switch (action) {
@@ -10133,6 +10145,301 @@ function cxMotorInput(t){
   if (k === 'pub-file') { cxPubOf(p).file = v.trim(); cxSaveSoon(); return true; }
   if (k === 'mo-muzica') { cxMontajOf(p).muzica = v; cxPubOf(p).musicQ = v; cxSaveSoon(); return true; }
   return true;
+}
+
+/* =========================================================
+   SINCRONIZARE ÎNTRE DISPOZITIVE · v28
+   Datele aplicației (aceleași ca în backup, fără tokenuri) stau în
+   repo-ul privat, în date/os-antrenor.json. Fiecare urcare e un commit,
+   deci orice versiune veche rămâne în istoricul GitHub.
+   Reguli de siguranță:
+   1. nu suprascrie niciodată o versiune mai nouă venită de pe alt dispozitiv;
+   2. dacă datele s-au schimbat și aici, și acolo, nu alege singură: întreabă;
+   3. înainte să înlocuiască datele de pe un dispozitiv sau din sincronizare,
+      urcă întâi o copie în date/copii/;
+   4. tokenurile nu pleacă niciodată (stau în altă cheie, în afara backup-ului).
+========================================================= */
+const CX_SYNC_FILE = 'date/os-antrenor.json';
+const CX_SYNC_META = 'osa_cx_sync';
+let cxSyncBusyNow = false, cxSyncTimer = null, cxSyncPoll = null, cxSyncLastTry = 0, cxSyncAgain = false, cxSyncPending = null;
+
+function cxSyncMeta(){ try { const o = JSON.parse(localStorage.getItem(CX_SYNC_META) || '{}'); return o && typeof o === 'object' ? o : {}; } catch(e) { return {}; } }
+function cxSyncMetaSet(o){ try { localStorage.setItem(CX_SYNC_META, JSON.stringify(o)); } catch(e) {} }
+function cxSyncMetaUp(fields){ const m = cxSyncMeta(); Object.assign(m, fields); cxSyncMetaSet(m); return m; }
+function cxSyncDevice(){
+  const m = cxSyncMeta();
+  if (!m.device) { m.device = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); cxSyncMetaSet(m); }
+  return m.device;
+}
+function cxSyncDeviceName(){
+  const u = navigator.userAgent || '';
+  return /iPhone|iPad/.test(u) ? 'iPhone' : /Android/.test(u) ? 'Android' : /Macintosh|Mac OS/.test(u) ? 'Mac' : /Windows/.test(u) ? 'PC cu Windows' : 'alt dispozitiv';
+}
+function cxSyncOn(){ return !!cxSyncMeta().on && cxMotorReady(); }
+function cxSyncDirty(){ return (lastLocalChangeAt || 0) > (cxSyncMeta().pushedAsOf || 0); }
+function cxSyncEditing(){ const a = document.activeElement; return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)); }
+function cxSyncHistoryUrl(){ const m = cxMotor(); return m.repo ? 'https://github.com/' + m.repo + '/commits/main/' + CX_SYNC_FILE : ''; }
+
+/* repo-ul motorului e o setare a dispozitivului: un backup sau o sincronizare veche nu are voie să-l golească */
+function cxRepoNow(){ try { return (state.calendar && state.calendar.studio && state.calendar.studio.motor && state.calendar.studio.motor.repo) || ''; } catch(e) { return ''; } }
+function cxRepoKeep(prev){ if (!prev) return; try { const m = cxMotor(); if (!m.repo) m.repo = prev; } catch(e) {} }
+
+/* ---------- GitHub: fișierul de sincronizare ---------- */
+async function cxGhRaw(path){
+  const m = cxMotor(), sec = cxSecret();
+  if (!m.repo || !sec.gh) throw new Error('Motorul nu e conectat.');
+  let r;
+  try { r = await fetch('https://api.github.com/repos/' + m.repo + '/contents/' + path, { headers: { 'Accept': 'application/vnd.github.raw', 'Authorization': 'Bearer ' + sec.gh, 'X-GitHub-Api-Version': '2022-11-28' }, cache: 'no-store' }); }
+  catch(e) { throw new Error('Fără conexiune la GitHub.'); }
+  if (!r.ok) { const e = new Error(r.status === 404 ? 'Nu găsesc fișierul de sincronizare.' : 'GitHub ' + r.status); e.status = r.status; throw e; }
+  return r.text();
+}
+async function cxSyncInfo(){
+  try {
+    const list = await cxGh('GET', '/repos/{repo}/contents/date');
+    const f = Array.isArray(list) ? list.find(x => x && x.name === 'os-antrenor.json') : null;
+    return f ? { sha: f.sha, size: f.size } : null;
+  } catch(e) { if (e.status === 404) return null; throw e; }
+}
+async function cxSyncFetch(){
+  const t = await cxGhRaw(CX_SYNC_FILE);
+  let p = null; try { p = JSON.parse(t); } catch(e) {}
+  if (!p || !p.data || typeof p.data !== 'object') throw new Error('Fișierul de sincronizare nu are date valide. Nu am schimbat nimic.');
+  return p;
+}
+function cxSyncPayload(){
+  const p = buildExportPayload();
+  p.dispozitiv = { id: cxSyncDevice(), nume: cxSyncDeviceName() };
+  p.sync = 1;
+  return p;
+}
+async function cxSyncPush(sha){
+  const asOf = lastLocalChangeAt || 0;
+  const p = cxSyncPayload();
+  const body = { message: 'Date OS Antrenor de pe ' + p.dispozitiv.nume, content: cxB64Utf8(JSON.stringify(p)) };
+  if (sha) body.sha = sha;
+  const res = await cxGh('PUT', '/repos/{repo}/contents/' + CX_SYNC_FILE, body);
+  cxSyncMetaUp({ sha: res && res.content ? res.content.sha : sha, appliedAt: p.exportedAt, pushedAsOf: Math.max(asOf, cxSyncMeta().pushedAsOf || 0), lastPushAt: Date.now(), lastOk: new Date().toISOString(), err: '', conflict: null });
+}
+/* copie de siguranță: înainte să înlocuim ceva, urcăm versiunea care urmează să plece */
+async function cxSyncCopy(payload, motiv){
+  const nume = (payload.dispozitiv && payload.dispozitiv.nume) || cxSyncDeviceName();
+  const path = 'date/copii/' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + nume.replace(/[^A-Za-z0-9]+/g, '') + '.json';
+  await cxGh('PUT', '/repos/{repo}/contents/' + path, { message: 'Copie de siguranță: ' + motiv, content: cxB64Utf8(JSON.stringify(Object.assign({}, payload, { motiv: motiv }))) });
+  return path;
+}
+function cxSyncApply(remote, sha){
+  const ok = applyImportedData(remote);
+  if (!ok) throw new Error('Datele din sincronizare nu au forma așteptată. Nu am schimbat nimic.');
+  cxSyncMetaUp({ sha: sha, appliedAt: remote.exportedAt, pushedAsOf: Math.max(lastLocalChangeAt || 0, Date.now()), lastOk: new Date().toISOString(), err: '', conflict: null });
+}
+function cxSyncSummary(d){
+  d = d || {};
+  const ideas = Object.values((d.content && d.content.ideas) || {}).reduce((a, l) => a + (Array.isArray(l) ? l.length : 0), 0);
+  return { leads: Array.isArray(d.leads) ? d.leads.length : 0, posts: (d.calendar && Array.isArray(d.calendar.posts)) ? d.calendar.posts.length : 0, ideas: ideas, testim: Array.isArray(d.testimonials) ? d.testimonials.length : 0 };
+}
+function cxSyncRerender(){
+  try {
+    if (activeTab === 'calendar' && cxView === 'automat' && !cxEditId) renderStudio();
+    if (cxSheet && String(cxSheet.type || '').indexOf('sync-') === 0) cxRenderRoot();
+  } catch(e) {}
+}
+
+/* ---------- rularea: aduce, urcă sau întreabă ---------- */
+async function cxSyncRun(manual){
+  if (!cxSyncOn()) return;
+  if (cxSyncBusyNow) { cxSyncAgain = true; return; }
+  cxSyncBusyNow = true; cxSyncLastTry = Date.now();
+  if (manual) cxSyncRerender();
+  try {
+    const m0 = cxSyncMeta();
+    if (m0.conflict && !manual) return;            // așteaptă alegerea lui Adrian
+    const info = await cxSyncInfo();
+    if (!info) { await cxSyncPush(null); if (manual) toast('Datele de aici sunt acum și în sincronizare.'); return; }
+    if (info.sha === m0.sha) {
+      if (cxSyncDirty()) await cxSyncPush(info.sha);
+      else { cxSyncMetaUp({ lastOk: new Date().toISOString(), err: '' }); if (manual) toast('Ești la zi pe toate dispozitivele.'); }
+      return;
+    }
+    const remote = await cxSyncFetch();
+    if (remote.dispozitiv && remote.dispozitiv.id === cxSyncDevice()) {   // e chiar ultima noastră urcare
+      cxSyncMetaUp({ sha: info.sha });
+      if (cxSyncDirty()) await cxSyncPush(info.sha);
+      return;
+    }
+    if (!cxSyncDirty()) {
+      if (cxSyncEditing() && !manual) return;       // nu schimbăm datele sub degetele tale; încercăm la următoarea verificare
+      cxSyncApply(remote, info.sha);
+      toast('Am adus datele noi de pe ' + ((remote.dispozitiv && remote.dispozitiv.nume) || 'alt dispozitiv') + '.');
+      return;
+    }
+    const c = { sha: info.sha, at: remote.exportedAt || '', nume: (remote.dispozitiv && remote.dispozitiv.nume) || 'alt dispozitiv' };
+    cxSyncMetaUp({ conflict: c });
+    toast('Datele s-au schimbat și aici, și pe ' + c.nume + '. Alege ce păstrezi, din Conținut → Automat.', 'error');
+  } catch(e) {
+    cxSyncMetaUp({ err: (e && e.message) || String(e) });
+    if (e && (e.status === 409 || e.status === 422)) cxSyncAgain = true;     // altcineva a urcat între timp: verificăm din nou
+    if (manual) toast('Sincronizarea n-a mers: ' + ((e && e.message) || e), 'error');
+  } finally {
+    cxSyncBusyNow = false;
+    cxSyncRerender();
+    if (cxSyncAgain) { cxSyncAgain = false; setTimeout(() => cxSyncRun(false), 1500); }
+  }
+}
+/* după o schimbare: urcă la 30 de secunde după ultima, dar cel mult o dată la 3 minute */
+function cxSyncSchedule(){
+  if (!cxSyncOn()) return;
+  clearTimeout(cxSyncTimer);
+  const since = Date.now() - (cxSyncMeta().lastPushAt || 0);
+  cxSyncTimer = setTimeout(() => cxSyncRun(false), Math.max(30000, 180000 - since));
+}
+function cxSyncBoot(){
+  if (cxSyncBoot.done) return;
+  cxSyncBoot.done = true;
+  setTimeout(() => cxSyncRun(false), 2500);
+  document.addEventListener('visibilitychange', () => {
+    if (!cxSyncOn()) return;
+    if (document.visibilityState === 'hidden') { if (cxSyncDirty()) cxSyncRun(false); }
+    else if (Date.now() - cxSyncLastTry > 20000) cxSyncRun(false);
+  });
+  window.addEventListener('focus', () => { if (cxSyncOn() && Date.now() - cxSyncLastTry > 20000) cxSyncRun(false); });
+  cxSyncPoll = setInterval(() => { if (document.visibilityState === 'visible') cxSyncRun(false); }, 120000);
+}
+
+/* ---------- pornirea și alegerile ---------- */
+async function cxSyncStart(){
+  if (!cxMotorReady()) { toast('Conectează întâi motorul (butonul Motor).', 'error'); return; }
+  if (cxSyncBusyNow) return;
+  cxSyncBusyNow = true; cxSyncRerender();
+  try {
+    cxSyncDevice();
+    const info = await cxSyncInfo();
+    if (!info) {
+      cxSyncMetaUp({ on: true });
+      await cxSyncPush(null);
+      toast('Sincronizarea e pornită. Datele de aici sunt prima versiune.');
+      return;
+    }
+    const remote = await cxSyncFetch();
+    cxSyncPending = remote;
+    cxSheet = { type: 'sync-start', sha: info.sha };
+    cxRenderRoot();
+  } catch(e) {
+    toast('Nu am putut porni sincronizarea: ' + ((e && e.message) || e), 'error');
+  } finally { cxSyncBusyNow = false; cxSyncRerender(); }
+}
+/* „ia”: datele din sincronizare înlocuiesc ce e aici (după o copie a celor de aici) */
+async function cxSyncTake(){
+  if (cxSyncBusyNow) return;
+  cxSyncBusyNow = true; cxSyncRerender();
+  try {
+    const info = await cxSyncInfo();
+    if (!info) throw new Error('Nu mai găsesc fișierul de sincronizare.');
+    const remote = (cxSyncPending && cxSheet && cxSheet.sha === info.sha) ? cxSyncPending : await cxSyncFetch();
+    const copie = await cxSyncCopy(cxSyncPayload(), 'datele de pe ' + cxSyncDeviceName() + ', înainte să fie înlocuite');
+    cxSyncMetaUp({ on: true });
+    cxSyncApply(remote, info.sha);
+    cxSyncPending = null; cxSheet = null; cxRenderRoot();
+    toast('Gata. Datele de aici sunt salvate în ' + copie.replace('date/copii/', 'copii/') + '.');
+  } catch(e) {
+    toast('N-am schimbat nimic: ' + ((e && e.message) || e), 'error');
+  } finally { cxSyncBusyNow = false; cxSyncRerender(); }
+}
+/* „pune”: datele de aici devin versiunea comună (după o copie a celor din sincronizare) */
+async function cxSyncKeep(){
+  if (cxSyncBusyNow) return;
+  cxSyncBusyNow = true; cxSyncRerender();
+  try {
+    const info = await cxSyncInfo();
+    if (info) {
+      const remote = (cxSyncPending && cxSheet && cxSheet.sha === info.sha) ? cxSyncPending : await cxSyncFetch();
+      await cxSyncCopy(remote, 'datele de pe ' + ((remote.dispozitiv && remote.dispozitiv.nume) || 'alt dispozitiv') + ', înainte să fie înlocuite');
+    }
+    cxSyncMetaUp({ on: true, conflict: null });
+    await cxSyncPush(info ? info.sha : null);
+    cxSyncPending = null; cxSheet = null; cxRenderRoot();
+    toast('Gata. Datele de aici sunt acum pe toate dispozitivele. Cealaltă versiune e salvată în copii/.');
+  } catch(e) {
+    if (e && (e.status === 409 || e.status === 422)) toast('Între timp a urcat alt dispozitiv. Mai apasă o dată.', 'error');
+    else toast('N-am schimbat nimic: ' + ((e && e.message) || e), 'error');
+  } finally { cxSyncBusyNow = false; cxSyncRerender(); }
+}
+
+/* ---------- interfață ---------- */
+function cxSyncCardHtml(){
+  if (!cxMotorReady()) return '';
+  const m = cxSyncMeta();
+  const hist = cxSyncHistoryUrl();
+  const head = '<div class="cx-row" style="margin-bottom:8px;"><p class="cx-label cx-grow" style="margin:0;">Sincronizare între dispozitive</p>';
+  if (!m.on) {
+    return '<div class="cx-panel cx-syncc">' + head + '</div>' +
+      '<p class="cx-small cx-dim" style="margin:0 0 12px;">Aceleași date pe telefon, Mac și PC. Se salvează în repo-ul tău privat, iar fiecare versiune rămâne în istoric. Tokenurile nu pleacă de pe dispozitiv.</p>' +
+      '<button type="button" class="cx-btn cx-btn-primary" data-action="cx-m-sync-start"'+(cxSyncBusyNow ? ' disabled' : '')+'>'+cxIco('undo')+(cxSyncBusyNow ? 'Verific…' : 'Pornește sincronizarea')+'</button></div>';
+  }
+  let stat;
+  if (m.conflict) stat = '<span class="cx-mstat bad"><i></i>Datele s-au schimbat și pe '+cxE(m.conflict.nume)+'</span>';
+  else if (m.err) stat = '<span class="cx-mstat bad"><i></i>'+cxE(m.err)+'</span>';
+  else stat = '<span class="cx-mstat ok"><i></i>Activă'+(m.lastOk ? ', verificată '+cxE(cxAgo(m.lastOk)) : '')+'</span>';
+  const pending = cxSyncDirty() && !m.conflict ? '<p class="cx-tiny cx-mute" style="margin:8px 0 0;">Ai schimbări care pleacă în cel mult 3 minute.</p>' : '';
+  return '<div class="cx-panel cx-syncc">' + head +
+      '<span class="cx-tiny cx-mute">'+cxE(cxSyncDeviceName())+'</span></div>' +
+    '<div class="cx-row cx-wrap" style="gap:8px;">' + stat + '</div>' + pending +
+    (m.conflict ? '<p class="cx-small cx-dim" style="margin:8px 0 0;">Nu am ales nimic în locul tău. Ambele versiuni sunt în siguranță până alegi.</p>' : '') +
+    '<div class="cx-row cx-wrap" style="gap:8px; margin-top:12px;">' +
+      (m.conflict ? '<button type="button" class="cx-btn cx-btn-sm cx-btn-primary" data-action="cx-m-sync-conflict">Alege ce păstrezi</button>'
+        : '<button type="button" class="cx-btn cx-btn-sm" data-action="cx-m-sync-now"'+(cxSyncBusyNow ? ' disabled' : '')+'>'+cxIco('undo')+(cxSyncBusyNow ? 'Sincronizez…' : 'Sincronizează acum')+'</button>') +
+      (hist ? '<a class="cx-btn cx-btn-sm cx-btn-quiet" href="'+cxA(hist)+'" target="_blank" rel="noopener">'+cxIco('ext')+'Istoricul versiunilor</a>' : '') +
+      '<button type="button" class="cx-btn cx-btn-sm cx-btn-quiet" data-action="cx-m-sync-off">Oprește</button>' +
+    '</div></div>';
+}
+function cxSyncSideHtml(title, s, when, cls){
+  return '<div class="cx-sync-side '+(cls || '')+'"><p class="cx-h-sm" style="margin:0 0 4px;">'+cxE(title)+'</p>' +
+    '<p class="cx-tiny cx-mute" style="margin:0 0 8px;">'+cxE(when)+'</p>' +
+    '<ul><li><b class="cx-num">'+s.leads+'</b> lead-uri</li><li><b class="cx-num">'+s.posts+'</b> postări</li><li><b class="cx-num">'+s.ideas+'</b> idei</li><li><b class="cx-num">'+s.testim+'</b> testimoniale</li></ul></div>';
+}
+function cxSyncSheetHtml(S){
+  const local = cxSyncSummary({ leads: state.leads, calendar: state.calendar, content: state.content, testimonials: state.testimonials });
+  const localWhen = lastLocalChangeAt ? 'ultima schimbare ' + cxAgo(new Date(lastLocalChangeAt).toISOString()) : 'fără schimbări recente';
+  const busy = cxSyncBusyNow ? ' disabled' : '';
+  if (S.type === 'sync-start' || S.type === 'sync-conflict') {
+    const r = cxSyncPending;
+    if (!r) return cxModal('Sincronizare', '<p class="cx-small cx-dim">Aduc versiunea din sincronizare…</p>');
+    const rs = cxSyncSummary(r.data);
+    const rn = (r.dispozitiv && r.dispozitiv.nume) || 'alt dispozitiv';
+    const intro = S.type === 'sync-start'
+      ? 'În sincronizare există deja date, urcate de pe ' + rn + '. Alege care rămân. Cealaltă versiune nu se pierde: o salvez întâi ca o copie în repo.'
+      : 'Datele s-au schimbat și aici, și pe ' + rn + ', de la ultima sincronizare. Alege care rămân. Cealaltă versiune nu se pierde: o salvez întâi ca o copie în repo.';
+    return cxModal(S.type === 'sync-start' ? 'Ce date folosim?' : 'Alege ce păstrezi',
+      '<p class="cx-small cx-dim" style="margin:-6px 0 14px;">'+cxE(intro)+'</p>' +
+      '<div class="cx-sync-vs">' + cxSyncSideHtml('Aici (' + cxSyncDeviceName() + ')', local, localWhen) + cxSyncSideHtml('În sincronizare (' + rn + ')', rs, r.exportedAt ? 'urcate ' + cxAgo(r.exportedAt) : '') + '</div>' +
+      '<div class="cx-col" style="gap:8px; margin-top:16px;">' +
+        '<button type="button" class="cx-btn cx-btn-primary" data-action="cx-m-sync-take"'+busy+' style="min-height:46px;">Folosește datele de pe '+cxE(rn)+'</button>' +
+        '<button type="button" class="cx-btn" data-action="cx-m-sync-keep"'+busy+' style="min-height:46px;">Folosește datele de aici</button>' +
+      '</div>' +
+      '<p class="cx-tiny cx-mute" style="margin:12px 0 0;">Dacă nu știi: alege dispozitivul pe care ai lucrat ultima dată. Oricare ai alege, poți reveni din „Istoricul versiunilor”.</p>');
+  }
+  return '';
+}
+async function cxSyncOpenConflict(){
+  const c = cxSyncMeta().conflict;
+  cxSheet = { type: 'sync-conflict', sha: c && c.sha };
+  cxSyncPending = null; cxRenderRoot();
+  try { cxSyncPending = await cxSyncFetch(); const info = await cxSyncInfo(); if (info) cxSheet.sha = info.sha; }
+  catch(e) { toast('Nu pot aduce cealaltă versiune: ' + ((e && e.message) || e), 'error'); cxSheet = null; }
+  cxRenderRoot();
+}
+function cxSyncClick(action){
+  switch (action) {
+    case 'cx-m-sync-start': cxSyncStart(); return true;
+    case 'cx-m-sync-now': cxSyncRun(true); return true;
+    case 'cx-m-sync-take': cxSyncTake(); return true;
+    case 'cx-m-sync-keep': cxSyncKeep(); return true;
+    case 'cx-m-sync-conflict': cxSyncOpenConflict(); return true;
+    case 'cx-m-sync-off':
+      if (!confirm('Oprești sincronizarea pe acest dispozitiv? Datele rămân aici și în repo; doar nu se mai potrivesc automat.')) return true;
+      cxSyncMetaUp({ on: false, conflict: null }); toast('Sincronizarea e oprită pe acest dispozitiv.'); cxSyncRerender(); return true;
+  }
+  return false;
 }
 
 /* =========================================================
@@ -16001,6 +16308,7 @@ async function init(){
 
   render();
   startDayRolloverWatcher();
+  try { cxSyncBoot(); } catch(e) {}
 }
 
 let lastKnownDate = null;
